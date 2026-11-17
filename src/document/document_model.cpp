@@ -1,0 +1,193 @@
+#include "document_model.h"
+#include <algorithm>
+#include <QPainterPath>
+
+namespace ArtPlus {
+
+Color Color::cmyk(float c, float m, float y, float k) {
+    Color col;
+    col.type = Type::CMYK;
+    col.components = {c, m, y, k};
+    return col;
+}
+
+Color Color::spot(const QString& name, float tint) {
+    Color col;
+    col.type = Type::Spot;
+    col.spotName = name;
+    col.tint = tint;
+    return col;
+}
+
+Color Color::rgb(float r, float g, float b) {
+    Color col;
+    col.type = Type::RGB;
+    col.components = {r, g, b};
+    return col;
+}
+
+void DocumentObject::removeChild(ObjectId id) {
+    m_children.erase(std::remove(m_children.begin(), m_children.end(), id), m_children.end());
+}
+
+void PathObject::addMove(const QPointF& p) {
+    m_elements.append({PathElement::Type::Move, p});
+}
+void PathObject::addLine(const QPointF& p) {
+    m_elements.append({PathElement::Type::Line, p});
+}
+void PathObject::addCurve(const QPointF& c1, const QPointF& c2, const QPointF& end) {
+    m_elements.append({PathElement::Type::Curve, c1, c2, end});
+}
+void PathObject::closePath() {
+    m_elements.append({PathElement::Type::Close});
+    m_closed = true;
+}
+
+QRectF PathObject::boundingBox() const {
+    if (m_elements.isEmpty()) return QRectF();
+    QPainterPath path;
+    for (const auto& el : m_elements) {
+        switch (el.type) {
+            case PathElement::Type::Move: path.moveTo(el.p1); break;
+            case PathElement::Type::Line: path.lineTo(el.p1); break;
+            case PathElement::Type::Curve: path.cubicTo(el.p1, el.p2, el.p3); break;
+            case PathElement::Type::Close: path.closeSubpath(); break;
+        }
+    }
+    return path.controlPointRect();
+}
+
+std::shared_ptr<DocumentObject> PathObject::clone() const {
+    auto copy = std::make_shared<PathObject>();
+    copy->m_elements = m_elements;
+    copy->m_closed = m_closed;
+    copy->m_name = m_name;
+    copy->m_visible = m_visible;
+    copy->m_locked = m_locked;
+    copy->m_transform = m_transform;
+    copy->m_fillStroke = m_fillStroke;
+    copy->fillGradient = fillGradient;
+    copy->strokeGradient = strokeGradient;
+    copy->m_layerId = m_layerId;
+    copy->m_id = QUuid::createUuid();
+    return copy;
+}
+
+QRectF TextObject::boundingBox() const {
+    QFont font(m_fontFamily, m_fontSize);
+    font.setBold(m_bold);
+    font.setItalic(m_italic);
+    QFontMetrics fm(font);
+    return fm.boundingRect(m_text);
+}
+
+std::shared_ptr<DocumentObject> TextObject::clone() const {
+    auto copy = std::make_shared<TextObject>();
+    copy->m_text = m_text;
+    copy->m_fontFamily = m_fontFamily;
+    copy->m_fontSize = m_fontSize;
+    copy->m_bold = m_bold;
+    copy->m_italic = m_italic;
+    copy->m_name = m_name;
+    copy->m_visible = m_visible;
+    copy->m_locked = m_locked;
+    copy->m_transform = m_transform;
+    copy->m_fillStroke = m_fillStroke;
+    copy->m_layerId = m_layerId;
+    copy->m_id = QUuid::createUuid();
+    return copy;
+}
+
+QRectF ImageObject::boundingBox() const {
+    return QRectF(0, 0, m_image.width(), m_image.height());
+}
+
+std::shared_ptr<DocumentObject> ImageObject::clone() const {
+    auto copy = std::make_shared<ImageObject>();
+    copy->m_image = m_image;
+    copy->m_name = m_name;
+    copy->m_visible = m_visible;
+    copy->m_locked = m_locked;
+    copy->m_transform = m_transform;
+    copy->m_fillStroke = m_fillStroke;
+    copy->m_layerId = m_layerId;
+    copy->m_id = QUuid::createUuid();
+    return copy;
+}
+
+QRectF GroupObject::boundingBox() const {
+    return QRectF();
+}
+
+std::shared_ptr<DocumentObject> GroupObject::clone() const {
+    auto copy = std::make_shared<GroupObject>();
+    copy->m_name = m_name;
+    copy->m_visible = m_visible;
+    copy->m_locked = m_locked;
+    copy->m_transform = m_transform;
+    copy->m_layerId = m_layerId;
+    copy->m_id = QUuid::createUuid();
+    return copy;
+}
+
+void Layer::removeObject(ObjectId id) {
+    m_objects.erase(std::remove(m_objects.begin(), m_objects.end(), id), m_objects.end());
+}
+
+void Document::addPage(std::shared_ptr<Page> page) {
+    m_pages[page->id()] = page;
+    m_pageOrder.push_back(page->id());
+}
+void Document::removePage(PageId id) {
+    m_pages.erase(id);
+    m_pageOrder.erase(std::remove(m_pageOrder.begin(), m_pageOrder.end(), id), m_pageOrder.end());
+}
+std::shared_ptr<Page> Document::page(PageId id) {
+    auto it = m_pages.find(id);
+    return it != m_pages.end() ? it->second : nullptr;
+}
+std::shared_ptr<Page> Document::currentPage() const {
+    if (m_pageOrder.empty()) return nullptr;
+    return page(m_pageOrder.back());
+}
+
+void Document::addLayer(std::shared_ptr<Layer> layer) {
+    m_layers[layer->id()] = layer;
+    m_layerOrder.push_back(layer->id());
+}
+void Document::removeLayer(LayerId id) {
+    m_layers.erase(id);
+    m_layerOrder.erase(std::remove(m_layerOrder.begin(), m_layerOrder.end(), id), m_layerOrder.end());
+}
+std::shared_ptr<Layer> Document::layer(LayerId id) {
+    auto it = m_layers.find(id);
+    return it != m_layers.end() ? it->second : nullptr;
+}
+
+void Document::addObject(std::shared_ptr<DocumentObject> obj) {
+    m_objects[obj->id()] = obj;
+}
+void Document::removeObject(ObjectId id) {
+    m_objects.erase(id);
+    m_selection.erase(std::remove(m_selection.begin(), m_selection.end(), id), m_selection.end());
+}
+std::shared_ptr<DocumentObject> Document::object(ObjectId id) {
+    auto it = m_objects.find(id);
+    return it != m_objects.end() ? it->second : nullptr;
+}
+
+void Document::selectObject(ObjectId id, bool add) {
+    if (!add) clearSelection();
+    if (m_objects.count(id) && std::find(m_selection.begin(), m_selection.end(), id) == m_selection.end()) {
+        m_selection.push_back(id);
+    }
+}
+void Document::deselectObject(ObjectId id) {
+    m_selection.erase(std::remove(m_selection.begin(), m_selection.end(), id), m_selection.end());
+}
+void Document::clearSelection() {
+    m_selection.clear();
+}
+
+} // namespace ArtPlus
