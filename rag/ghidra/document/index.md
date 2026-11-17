@@ -27,6 +27,7 @@ Este índice mapeia os namespaces e classes identificados via análise estática
 
 ### Fase 3 — PDF Core Implementado
 - `phase3-evidence.md` — cross-evidence entre Ghidra, ArtPro+ observável e o módulo `src/pdf/` do ArtPlus: importador, exportador, serialização `.artplus`, testes Editing/RoundTrip.
+- `phase3-delivery-evidence.md` — confirmação 5/5 CTests, FormXObject groups, annotations warnings, endereços relevantes, limitações reconfirmadas.
 
 ---
 *Generated: 2026-11-17*
