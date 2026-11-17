@@ -1,4 +1,5 @@
 #include "pdf_exporter.h"
+#include <QtZlib/zlib.h>
 #include <QFile>
 #include <QImage>
 #include <QBuffer>
@@ -7,6 +8,16 @@
 
 namespace ArtPlus {
 namespace PDF {
+
+// =====================================================================
+// Object record: text header + optional binary stream payload
+// =====================================================================
+struct ObjectRecord {
+    std::string header;            // "<< /Type /Page ... >>" or full "<< /Length N >>\nstream\n"
+    std::vector<uint8_t> stream;   // optional binary stream payload (empty for non-stream)
+    bool isStream = false;
+    std::string footer;            // usually empty; "endstream" added by writer for streams
+};
 
 // =====================================================================
 // Helpers
@@ -83,6 +94,29 @@ QByteArray PdfExporter::colorForOperator(const Color& c, bool stroke) {
     return stroke ? QByteArray("0 0 0 RG") : QByteArray("0 0 0 rg");
 }
 
+// Lossless RGB image prep for /Subtype /Image /Filter /FlateDecode
+PdfExporter::ImageEmbedding PdfExporter::prepareImage(const QImage& img) {
+    ImageEmbedding out;
+    out.objectNum = 0;
+    QImage rgb = img.convertToFormat(QImage::Format_RGB888);
+    out.width = rgb.width();
+    out.height = rgb.height();
+    const uchar* bits = rgb.constBits();
+    out.rgbData.assign(bits, bits + (size_t)rgb.sizeInBytes());
+    return out;
+}
+
+std::vector<uint8_t> PdfExporter::flateCompress(const std::vector<uint8_t>& raw) {
+    uLongf bound = compressBound((uLong)raw.size()) + 32;
+    std::vector<uint8_t> out(bound);
+    if (compress2(out.data(), &bound, raw.data(), (uLong)raw.size(), 9) != Z_OK) {
+        out.clear();
+        return out;
+    }
+    out.resize(bound);
+    return out;
+}
+
 // =====================================================================
 // Export
 // =====================================================================
@@ -102,15 +136,23 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
 
     const int numPages = (int)doc.pageOrder().size();
 
-    // XML object numbers:
+    // Object layout (1-indexed):
     //   1 = Catalog, 2 = Pages, 3..(2+numPages) = Page dicts
-    //   (3+numPages)..(2+2*numPages) = Contents, (3+2*numPages) = Font
+    //   (3+numPages)..(2+2*numPages) = Contents
+    //   (3+2*numPages) = Font
+    //   (4+2*numPages).. = Image XObjects (assigned per image object in doc order)
     const int contentBase = 3 + numPages;
-    const int fontNum = 3 + 2 * numPages;
+    const int fontNum = contentBase + numPages;
+    const int imageBase = fontNum + 1;
 
-    // Precompute boxes and draw orders
+    // Precompute boxes, draw orders, and image assignments (deterministic, per file order)
     std::vector<QRectF> boxes;
     std::vector<std::vector<std::shared_ptr<DocumentObject>>> orders;
+    std::vector<std::vector<int>> pageImageNums;   // per page: list of XObject object numbers
+    std::vector<std::vector<ImageEmbedding>> pageImageData; // per page: parallel embeddings
+    std::map<ObjectId, int> imageXObjectNum;
+    int nextImageNum = imageBase;
+
     for (PageId pid : doc.pageOrder()) {
         auto page = doc.page(pid);
         boxes.push_back(page->boxes().mediaBox);
@@ -126,13 +168,36 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
         }
         if (order.empty()) for (const auto& [id, obj] : doc.objects()) order.push_back(obj);
         orders.push_back(std::move(order));
+
+        std::vector<int> xnums;
+        std::vector<ImageEmbedding> embeds;
+        for (const auto& obj : orders.back()) {
+            if (obj->type() == ObjectType::Image) {
+                auto imgObj = std::dynamic_pointer_cast<ImageObject>(obj);
+                if (!imgObj) continue;
+                int xobj;
+                auto it = imageXObjectNum.find(obj->id());
+                if (it != imageXObjectNum.end()) xobj = it->second;
+                else { xobj = nextImageNum++; imageXObjectNum[obj->id()] = xobj; }
+                ImageEmbedding emb = prepareImage(imgObj->image());
+                emb.objectNum = xobj;
+                embeds.push_back(std::move(emb));
+                xnums.push_back(xobj);
+            }
+        }
+        pageImageNums.push_back(std::move(xnums));
+        pageImageData.push_back(std::move(embeds));
     }
 
-    // Generate contents
-    // Note: imported coordinates are already in Qt (y-down) space; export them as-is.
+    // Prepare image embedding lookup by object number
+    std::map<int, ImageEmbedding> imagesByNum;
+    for (const auto& embeds : pageImageData) for (const auto& emb : embeds) imagesByNum[emb.objectNum] = emb;
+
+    // Build content streams with image Do operators
     std::vector<std::string> contents;
     for (size_t pi = 0; pi < orders.size(); ++pi) {
         std::ostringstream content;
+        size_t imgIdx = 0;
         for (const auto& obj : orders[pi]) {
             content << "q\n";
             QTransform t = obj->transform();
@@ -172,49 +237,102 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
                 content << "BT\n/F1 " << text->fontSize() << " Tf\n";
                 content << "(" << escapeTextString(text->text()).toStdString() << ") Tj\nET\n";
             }
+            else if (obj->type() == ObjectType::Image) {
+                int xobj = pageImageNums[pi][imgIdx++];
+                content << "/Im" << xobj << " Do\n";
+            }
             content << "Q\n";
         }
         contents.push_back(content.str());
     }
 
-    // Build object bodies (1-indexed)
-    std::vector<std::string> bodies;
-    bodies.push_back("<< /Type /Catalog /Pages 2 0 R >>");
+    // Build object records
+    std::vector<ObjectRecord> records;
+    auto add = [&](const std::string& body) -> int {
+        ObjectRecord r;
+        r.header = body;
+        records.push_back(std::move(r));
+        return (int)records.size();
+    };
+    auto addStream = [&](const std::string& dictHeader, const std::vector<uint8_t>& streamData) -> int {
+        ObjectRecord r;
+        r.header = dictHeader;
+        r.stream = streamData;
+        r.isStream = true;
+        records.push_back(std::move(r));
+        return (int)records.size();
+    };
+
+    add("<< /Type /Catalog /Pages 2 0 R >>");
     {
         std::ostringstream o;
         o << "<< /Type /Pages /Kids [";
         for (int i = 0; i < numPages; ++i) o << " " << (3 + i) << " 0 R";
         o << " ] /Count " << numPages << " >>";
-        bodies.push_back(o.str());
+        add(o.str());
     }
     for (int i = 0; i < numPages; ++i) {
         int contentsNum = contentBase + i;
         std::ostringstream o;
         o << "<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 " << (int)boxes[i].width() << " " << (int)boxes[i].height()
-          << " ] /Contents " << contentsNum << " 0 R /Resources << /Font << /F1 " << fontNum << " 0 R >> >> >>";
-        bodies.push_back(o.str());
+          << " ] /Contents " << contentsNum << " 0 R /Resources << /Font << /F1 " << fontNum << " 0 R >>";
+        if (!pageImageNums[i].empty()) {
+            o << " /XObject <<";
+            for (int xobj : pageImageNums[i]) o << " /Im" << xobj << " " << xobj << " 0 R";
+            o << " >>";
+        }
+        o << " >> >>";
+        add(o.str());
     }
     for (int i = 0; i < numPages; ++i) {
         std::ostringstream o;
-        o << "<< /Length " << contents[i].size() << " >>\nstream\n" << contents[i] << "endstream";
-        bodies.push_back(o.str());
+        o << "<< /Length " << contents[i].size() << " >>\nstream\n";
+        std::vector<uint8_t> payload(contents[i].begin(), contents[i].end());
+        addStream(o.str(), std::move(payload));
     }
-    bodies.push_back("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
 
-    // Compute offsets, write file
-    std::vector<int64_t> offsets(bodies.size());
+    // Image XObjects in fixed order (imageBase .. nextImageNum-1)
+    for (int x = imageBase; x < nextImageNum; ++x) {
+        auto it = imagesByNum.find(x);
+        if (it == imagesByNum.end()) {
+            // 1x1 white fallback (should not happen; keeps file valid)
+            std::vector<uint8_t> white = flateCompress(std::vector<uint8_t>{0xFF, 0xFF, 0xFF});
+            std::ostringstream o;
+            o << "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /FlateDecode /Length " << white.size() << " >>\nstream\n";
+            addStream(o.str(), std::move(white));
+            continue;
+        }
+        const ImageEmbedding& emb = it->second;
+        std::vector<uint8_t> compressed = flateCompress(emb.rgbData);
+        if (compressed.empty()) return false;
+        std::ostringstream o;
+        o << "<< /Type /XObject /Subtype /Image /Width " << emb.width << " /Height " << emb.height
+          << " /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /FlateDecode /Length " << compressed.size()
+          << " >>\nstream\n";
+        addStream(o.str(), std::move(compressed));
+    }
+
+    // Assemble the file
+    std::vector<int64_t> offsets(records.size());
     QByteArray out;
     out += "%PDF-1.4\n";
-    for (size_t i = 0; i < bodies.size(); ++i) {
+    for (size_t i = 0; i < records.size(); ++i) {
         offsets[i] = out.size();
         out += std::to_string(i + 1).c_str();
         out += " 0 obj\n";
-        out += bodies[i].c_str();
-        out += "\nendobj\n";
+        out += records[i].header.c_str();
+        if (records[i].isStream) {
+            out += QByteArray((const char*)records[i].stream.data(), (int)records[i].stream.size());
+            out += "\nendstream\n";
+        } else {
+            out += "\n";
+        }
+        out += "endobj\n";
     }
     int64_t xref = out.size();
     out += "xref\n0 ";
-    out += std::to_string(bodies.size() + 1).c_str();
+    out += std::to_string(records.size() + 1).c_str();
     out += "\n0000000000 65535 f \n";
     for (size_t i = 0; i < offsets.size(); ++i) {
         char buf[32];
@@ -222,7 +340,7 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
         out += buf;
     }
     out += "trailer\n<< /Size ";
-    out += std::to_string(bodies.size() + 1).c_str();
+    out += std::to_string(records.size() + 1).c_str();
     out += " /Root 1 0 R >>\nstartxref\n";
     out += std::to_string(xref).c_str();
     out += "\n%%EOF";

@@ -43,13 +43,6 @@ set(UI_SOURCES
     src/ui/main_window.h
 )
 
-add_executable(pdf_probe
-    tests/integration/pdf_probe.cpp
-    ${DOCUMENT_SOURCES}
-    ${PDF_SOURCES}
-)
-target_link_libraries(pdf_probe PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::ZlibPrivate)
-
 add_executable(pdf_smoke
     tests/integration/pdf_smoke.cpp
     ${DOCUMENT_SOURCES}
@@ -82,5 +75,15 @@ add_executable(pdf_roundtrip_test
 )
 target_link_libraries(pdf_roundtrip_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::ZlibPrivate)
 add_test(NAME PdfRoundTrip COMMAND pdf_roundtrip_test)
+
+add_executable(editing_test
+    tests/unit/test_editing.cpp
+    ${DOCUMENT_SOURCES}
+    ${PDF_SOURCES}
+)
+target_link_libraries(editing_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::ZlibPrivate)
+add_test(NAME EditingTests COMMAND editing_test)
+
 set_tests_properties(UnitTests PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")
 set_tests_properties(PdfRoundTrip PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")
+set_tests_properties(EditingTests PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")

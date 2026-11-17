@@ -25,6 +25,9 @@ Este índice mapeia os namespaces e classes identificados via análise estática
 ### Annotations
 - `Annotation`, `Annotation3D`, `AnnotationText`, `Popup`
 
+### Fase 3 — PDF Core Implementado
+- `phase3-evidence.md` — cross-evidence entre Ghidra, ArtPro+ observável e o módulo `src/pdf/` do ArtPlus: importador, exportador, serialização `.artplus`, testes Editing/RoundTrip.
+
 ---
 *Generated: 2026-11-17*
 *Base Path: rag/ghidra/exports/Document.dll/*
