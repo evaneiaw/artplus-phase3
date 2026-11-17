@@ -145,52 +145,160 @@ PdfImportResult PdfImporter::import(const PDF::PdfDocument& doc, Document& out) 
             ++result.objectsImported;
         }
 
-        // Convert images (stub for XObject resolution; records as placeholder object)
-        for (const auto& img : parsed.images) {
-            auto obj = std::make_shared<ImageObject>();
-            obj->setLayerId(layer->id());
-            // Try to extract image data from the XObject dictionary
-            // Locate resource ref from page Resources
+        // Convert XObjects (images vs forms recursively)
+        for (const auto& xobjPlaceholder : parsed.images) {
+            // Resolve XObject dict from page Resources
             PdfValue res = doc.pageResources(pageIndex);
             PdfValue xobjs = res.dictGet("XObject");
-            std::string key = img.resourceName.toStdString();
+            std::string key = xobjPlaceholder.resourceName.toStdString();
             if (!key.empty() && key[0] == '/') key = key.substr(1);
             PdfValue ref = xobjs.dictGet(key);
-            if (ref.isRef()) {
-                const PdfObject* xo = doc.findObject(ref.refObj(), ref.refGen());
-                if (xo && xo->isStream) {
-                    // Attempt to decode as JPEG (DCTDecode) or raw RGB (FlateDecode)
-                    std::map<std::string, PdfValue> dict = xo->value.dict();
-                    auto subtype = dict.find("Subtype");
-                    bool isImage = subtype != dict.end() && subtype->second.isName() && subtype->second.nameValue() == "Image";
-                    if (isImage) {
-                        QByteArray raw((const char*)xo->stream.data(), (int)xo->stream.size());
-                        QImage decoded(raw);
-                        int w = xo->value.getInt("Width", 0);
-                        int h = xo->value.getInt("Height", 0);
-                        if (!decoded.isNull()) {
-                            obj->setImage(decoded.scaled((int)img.displayWidth, (int)img.displayHeight, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
-                        } else if (w > 0 && h > 0 && w * h * 3 <= raw.size()) {
-                            // raw RGB FlateDecode data
-                            QImage tmp(w, h, QImage::Format_RGB888);
-                            memcpy(tmp.bits(), raw.constData(), (size_t)tmp.sizeInBytes());
-                            obj->setImage(tmp);
+            if (!ref.isRef()) {
+                result.warnings.push_back(QString("XObject %1 not found in resources").arg(xobjPlaceholder.resourceName));
+                continue;
+            }
+            const PdfObject* xo = doc.findObject(ref.refObj(), ref.refGen());
+            if (!xo || !xo->isStream) {
+                result.warnings.push_back(QString("XObject %1 not a stream").arg(xobjPlaceholder.resourceName));
+                continue;
+            }
+            // Determine subtype
+            PdfValue subtypeV = xo->value.dictGet("Subtype");
+            QString subtype;
+            if (subtypeV.isName()) subtype = subtypeV.nameValue();
+            else if (subtypeV.isString()) subtype = QString::fromLatin1(subtypeV.stringValue());
+
+            if (subtype == "Image") {
+                auto obj = std::make_shared<ImageObject>();
+                obj->setLayerId(layer->id());
+                QByteArray raw((const char*)xo->stream.data(), (int)xo->stream.size());
+                int w = xo->value.getInt("Width", 0);
+                int h = xo->value.getInt("Height", 0);
+                // Try JPEG via QImage::fromData first (works for DCTDecode)
+                QImage decoded(raw);
+                if (!decoded.isNull()) {
+                    obj->setImage(decoded.scaled((int)xobjPlaceholder.displayWidth, (int)xobjPlaceholder.displayHeight, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+                } else if (w > 0 && h > 0 && w * h * 3 <= raw.size()) {
+                    QImage tmp(w, h, QImage::Format_RGB888);
+                    memcpy(tmp.bits(), raw.constData(), (size_t)tmp.sizeInBytes());
+                    obj->setImage(tmp);
+                } else {
+                    // Fallback placeholder if cannot decode; keep the object so nothing is silently dropped
+                    QImage placeholder((int)xobjPlaceholder.displayWidth, (int)xobjPlaceholder.displayHeight, QImage::Format_RGB32);
+                    placeholder.fill(Qt::darkGray);
+                    obj->setImage(placeholder);
+                    result.warnings.push_back(QString("Image %1 could not be decoded (format unsupported); placeholder used").arg(xobjPlaceholder.resourceName));
+                }
+                obj->setTransform(xobjPlaceholder.transform);
+                obj->setName(QString("Image %1").arg(++result.imagesImported));
+                out.addObject(obj);
+                layer->addObject(obj->id());
+                ++result.objectsImported;
+            } else if (subtype == "Form") {
+                // Recurse into the form's content stream as a group
+                auto groupObj = std::make_shared<GroupObject>();
+                groupObj->setLayerId(layer->id());
+                groupObj->setTransform(xobjPlaceholder.transform);
+                groupObj->setName(QString("Form %1").arg(key.c_str()));
+
+                // Form matrix (optional; default identity)
+                QTransform formMatrix;
+                PdfValue matrix = xo->value.dictGet("Matrix");
+                if (matrix.isArray() && matrix.arraySize() >= 6) {
+                    auto arr = matrix.array();
+                    double a = arr[0].number(), b = arr[1].number(), c = arr[2].number(),
+                           d = arr[3].number(), e = arr[4].number(), f = arr[5].number();
+                    formMatrix = QTransform(a, b, c, d, e, f);
+                }
+
+                // Parse the form's content stream. PDF operators inside the form
+                // are in the form's own user space, which is y-up and independent
+                // from the enclosing page. Pass the form's own BBox as the y-flip
+                // height so nested coordinates are QGraphicsView-compatible.
+                double formHeight = 100.0;
+                PdfValue bbox = xo->value.dictGet("BBox");
+                if (bbox.isArray() && bbox.arraySize() >= 4) {
+                    formHeight = bbox.arrayAt(3).number() - bbox.arrayAt(1).number();
+                    if (formHeight <= 0.0) formHeight = 100.0;
+                }
+                QByteArray formContents((const char*)xo->stream.data(), (int)xo->stream.size());
+                // We use identity initialCtm: the form's own CTM starts at identity
+                // in PDF convention; the y-flip is applied with formHeight.
+                PDF::ParseResult formParsed = PDF::PdfContentParser::parse(
+                    formContents, doc, xo->value, QTransform(), formHeight);
+
+                // Parse again isn't needed; we need to create objects. For simplicity, use a child layer.
+                auto childLayer = std::make_shared<Layer>(QString("Form %1").arg(key.c_str()));
+                out.addLayer(childLayer);
+                // Add children to the child layer and to the group
+                for (const auto& p : formParsed.paths) {
+                    auto cobj = std::make_shared<PathObject>();
+                    cobj->setLayerId(childLayer->id());
+                    for (const auto& e : p.elements) {
+                        switch (e.t) {
+                            case PDF::ParsedPath::Element::T::Move:  cobj->addMove(e.p1); break;
+                            case PDF::ParsedPath::Element::T::Line:  cobj->addLine(e.p1); break;
+                            case PDF::ParsedPath::Element::T::Cubic: cobj->addCurve(e.p1, e.p2, e.p3); break;
+                            case PDF::ParsedPath::Element::T::Close: cobj->closePath(); break;
                         }
                     }
+                    cobj->fillStroke().strokeWidth = p.lineWidth;
+                    cobj->fillStroke().capStyle = p.capStyle;
+                    cobj->fillStroke().joinStyle = p.joinStyle;
+                    cobj->fillStroke().miterLimit = (float)p.miterLimit;
+                    cobj->fillStroke().dashPattern = p.dashPattern;
+                    cobj->fillStroke().dashOffset = p.dashPhase;
+                    if (p.hasFill) cobj->fillStroke().fill = p.fillColor;
+                    if (p.hasStroke) cobj->fillStroke().stroke = p.strokeColor;
+                    cobj->setName(QString("FormPath %1").arg(result.objectsImported + 1));
+                    // Compose parent placeholder transform with form's own matrix and child local transform
+                    cobj->setTransform(xobjPlaceholder.transform * formMatrix * cobj->transform());
+                    out.addObject(cobj);
+                    childLayer->addObject(cobj->id());
+                    groupObj->addChild(cobj->id());
+                    ++result.objectsImported;
+                }
+                for (const auto& t : formParsed.texts) {
+                    auto cobj = std::make_shared<TextObject>();
+                    cobj->setLayerId(childLayer->id());
+                    cobj->setText(t.text);
+                    QString fam = t.fontName;
+                    bool bold = fam.contains("Bold", Qt::CaseInsensitive);
+                    bool italic = fam.contains("Italic", Qt::CaseInsensitive) || fam.contains("Oblique", Qt::CaseInsensitive);
+                    fam.replace("-Bold", "").replace("-Italic", "").replace("-Oblique", "");
+                    if (fam.isEmpty()) fam = "Helvetica";
+                    cobj->setFontFamily(fam);
+                    cobj->setBold(bold);
+                    cobj->setItalic(italic);
+                    cobj->setFontSize(t.fontSize);
+                    cobj->setTransform(xobjPlaceholder.transform * formMatrix * t.transform);
+                    cobj->fillStroke().fill = t.fillColor;
+                    cobj->setName(QString("FormText %1").arg(result.objectsImported + 1));
+                    out.addObject(cobj);
+                    childLayer->addObject(cobj->id());
+                    groupObj->addChild(cobj->id());
+                    ++result.objectsImported;
+                }
+                for (const auto& ftxt : formParsed.unsupported) {
+                    result.warnings.push_back(QString("Form %1: %2").arg(key.c_str()).arg(ftxt));
+                }
+                out.addObject(groupObj);
+                layer->addObject(groupObj->id());
+                ++result.objectsImported;
+            } else {
+                result.warnings.push_back(QString("XObject %1: unsupported subtype '%2'").arg(xobjPlaceholder.resourceName, subtype));
+            }
+        }
+
+        // Warn on annotations (not parsed, but we must not fail silently)
+        {
+            PdfValue pageVal = doc.pageDictionary(pageIndex);
+            if (pageVal.dictHas("Annots")) {
+                PdfValue annots = pageVal.dictGet("Annots");
+                if (annots.isArray()) {
+                    result.warnings.push_back(QString("Page %1 contains %2 annotation(s) — not yet supported").arg(pageIndex + 1).arg(annots.arraySize()));
                 }
             }
-            obj->setTransform(img.transform);
-            obj->setName(QString("Image %1").arg(++result.imagesImported));
-            if (obj->image().isNull()) {
-                // Record as unsupported if we could not decode
-                QImage placeholder((int)img.displayWidth, (int)img.displayHeight, QImage::Format_RGB32);
-                placeholder.fill(Qt::darkGray);
-                obj->setImage(placeholder);
-                result.warnings.push_back(QString("Image '%1' could not be decoded; placeholder inserted").arg(img.resourceName));
-            }
-            out.addObject(obj);
-            layer->addObject(obj->id());
-            ++result.objectsImported;
         }
 
         // Clips are recorded as warnings (full clipping mask support is future work)

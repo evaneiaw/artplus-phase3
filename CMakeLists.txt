@@ -50,6 +50,17 @@ add_executable(pdf_smoke
 )
 target_link_libraries(pdf_smoke PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::ZlibPrivate)
 
+add_executable(form_xobject_test
+    tests/integration/form_xobject_test.cpp
+    ${DOCUMENT_SOURCES}
+    ${PDF_SOURCES}
+)
+target_link_libraries(form_xobject_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::ZlibPrivate)
+add_test(NAME FormXObjects COMMAND form_xobject_test)
+set_tests_properties(FormXObjects PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")
+add_test(NAME PdfSmoke COMMAND pdf_smoke)
+set_tests_properties(PdfSmoke PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")
+
 add_executable(ArtPlus
     src/app/main.cpp
     ${DOCUMENT_SOURCES}
