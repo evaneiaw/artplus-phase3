@@ -4,12 +4,28 @@
 #include <vector>
 #include <string>
 #include <optional>
+#include <unordered_map>
 #include <QRectF>
 #include <QColor>
 #include <QTransform>
 #include <QUuid>
+#include <QImage>
+#include <QVector>
 
 namespace ArtPlus {
+
+// Helper for std::hash with QUuid
+struct QUuidHash {
+    std::size_t operator()(const QUuid &id) const noexcept {
+        // Simple hash based on the string representation
+        std::size_t h = 0;
+        const char* data = id.toString().toUtf8().constData();
+        for (size_t i = 0; data[i]; ++i) {
+            h = h * 31 + data[i];
+        }
+        return h;
+    }
+};
 
 class DocumentObject;
 class Layer;
@@ -17,9 +33,9 @@ class Page;
 class ColorSpace;
 class Separation;
 
-using ObjectId = QUuid;
-using LayerId = QUuid;
-using PageId = QUuid;
+using ObjectId = uint32_t;
+using LayerId = uint32_t;
+using PageId = uint32_t;
 
 enum class ObjectType {
     Path,
@@ -61,6 +77,16 @@ struct Color {
     static Color spot(const QString& name, float tint = 1.0f);
     static Color rgb(float r, float g, float b);
     bool isValid() const { return type != Type::None; }
+    
+    bool operator==(const Color& other) const {
+        return type == other.type &&
+               components == other.components &&
+               spotName == other.spotName &&
+               qFuzzyCompare(tint, other.tint);
+    }
+    bool operator!=(const Color& other) const {
+        return !(*this == other);
+    }
 };
 
 struct FillStroke {
@@ -91,13 +117,14 @@ struct Gradient {
 
 class DocumentObject : public std::enable_shared_from_this<DocumentObject> {
 public:
-    DocumentObject(ObjectType type) : m_type(type), m_id(QUuid::createUuid()) {}
+    DocumentObject(ObjectType type) : m_type(type), m_id(nextObjectId++) {}
     virtual ~DocumentObject() = default;
 
     ObjectId id() const { return m_id; }
     ObjectType type() const { return m_type; }
     const QString& name() const { return m_name; }
     void setName(const QString& name) { m_name = name; }
+    void setId(ObjectId id) { m_id = id; }
 
     bool visible() const { return m_visible; }
     void setVisible(bool v) { m_visible = v; }
@@ -126,6 +153,7 @@ public:
 
 private:
     ObjectId m_id;
+    static uint32_t nextObjectId;
     ObjectType m_type;
     QString m_name;
     bool m_visible = true;
@@ -218,9 +246,9 @@ public:
 
 class Layer {
 public:
-    Layer(const QString& name = "Layer") : m_name(name), m_id(QUuid::createUuid()) {}
+    Layer(const QString& name = "Layer") : m_name(name), m_id(nextLayerId++) {}
 
-    LayerId id() const { return m_id; }
+    uint32_t id() const { return m_id; }
     const QString& name() const { return m_name; }
     void setName(const QString& n) { m_name = n; }
 
@@ -242,7 +270,8 @@ public:
     void removeObject(ObjectId id);
 
 private:
-    LayerId m_id;
+    uint32_t m_id;
+    static uint32_t nextLayerId;
     QString m_name;
     bool m_visible = true;
     bool m_locked = false;
@@ -254,21 +283,22 @@ private:
 
 class Page {
 public:
-    Page() : m_id(QUuid::createUuid()) {}
+    Page() : m_id(nextId++) {}
 
-    PageId id() const { return m_id; }
+    uint32_t id() const { return m_id; }
     const PageBoxes& boxes() const { return m_boxes; }
     PageBoxes& boxes() { return m_boxes; }
 
-    const std::vector<LayerId>& layers() const { return m_layers; }
-    void addLayer(LayerId id) { m_layers.push_back(id); }
+    const std::vector<uint32_t>& layers() const { return m_layers; }
+    void addLayer(uint32_t id) { m_layers.push_back(id); }
 
     QRectF pageRect() const { return m_boxes.cropBox; }
 
 private:
-    PageId m_id;
+    uint32_t m_id;
+    static uint32_t nextId;
     PageBoxes m_boxes;
-    std::vector<LayerId> m_layers;
+    std::vector<uint32_t> m_layers;
 };
 
 class Document {
