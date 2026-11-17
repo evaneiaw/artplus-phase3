@@ -1,47 +1,26 @@
 #include <QApplication>
-#include <QMainWindow>
-#include <QMenuBar>
-#include <QStatusBar>
-#include <QToolBar>
-
-class ArtPlusMainWindow : public QMainWindow {
-public:
-    ArtPlusMainWindow() {
-        setWindowTitle("ArtPlus - Professional Prepress Editor");
-        resize(1200, 800);
-
-        setupMenus();
-        setupToolBars();
-        
-        statusBar()->showMessage("Ready");
-    }
-
-private:
-    void setupMenus() {
-        QMenu *fileMenu = menuBar()->addMenu("&File");
-        fileMenu->addAction("&Open");
-        fileMenu->addAction("&Save");
-        fileMenu->addSeparator();
-        fileMenu->addAction("&Exit", qApp, &QCoreApplication::quit);
-
-        QMenu *editMenu = menuBar()->addMenu("&Edit");
-        editMenu->addAction("&Undo");
-        editMenu->addAction("&Redo");
-
-        QMenu *viewMenu = menuBar()->addMenu("&View");
-        QMenu *prepressMenu = menuBar()->addMenu("&Prepress");
-    }
-
-    void setupToolBars() {
-        QToolBar *mainToolBar = addToolBar("Main");
-        mainToolBar->addAction("Select");
-        mainToolBar->addAction("Zoom");
-    }
-};
+#include <QCommandLineParser>
+#include <QTimer>
+#include "../ui/main_window.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
-    ArtPlusMainWindow window;
+    QCommandLineParser parser;
+    parser.addHelpOption();
+    parser.addOption(QCommandLineOption("open", "Open PDF file on startup", "pdf"));
+    parser.addOption(QCommandLineOption("quit-after", "Quit after N seconds (for smoke testing)", "sec"));
+    parser.process(app);
+
+    ArtPlus::ArtPlusMainWindow window;
     window.show();
+
+    if (parser.isSet("open")) {
+        QString path = parser.value("open");
+        window.openPdfPath(path);
+    }
+    if (parser.isSet("quit-after")) {
+        int sec = parser.value("quit-after").toInt();
+        QTimer::singleShot(sec * 1000, &app, &QApplication::quit);
+    }
     return app.exec();
 }

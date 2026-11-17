@@ -158,6 +158,10 @@ std::shared_ptr<Page> Document::page(PageId id) {
     auto it = m_pages.find(id);
     return it != m_pages.end() ? it->second : nullptr;
 }
+std::shared_ptr<Page> Document::page(PageId id) const {
+    auto it = m_pages.find(id);
+    return it != m_pages.end() ? it->second : nullptr;
+}
 std::shared_ptr<Page> Document::currentPage() const {
     if (m_pageOrder.empty()) return nullptr;
     auto it = m_pages.find(m_pageOrder.back());
@@ -176,6 +180,10 @@ std::shared_ptr<Layer> Document::layer(LayerId id) {
     auto it = m_layers.find(id);
     return it != m_layers.end() ? it->second : nullptr;
 }
+std::shared_ptr<Layer> Document::layer(LayerId id) const {
+    auto it = m_layers.find(id);
+    return it != m_layers.end() ? it->second : nullptr;
+}
 
 void Document::addObject(std::shared_ptr<DocumentObject> obj) {
     m_objects[obj->id()] = obj;
@@ -185,6 +193,10 @@ void Document::removeObject(ObjectId id) {
     m_selection.erase(std::remove(m_selection.begin(), m_selection.end(), id), m_selection.end());
 }
 std::shared_ptr<DocumentObject> Document::object(ObjectId id) {
+    auto it = m_objects.find(id);
+    return it != m_objects.end() ? it->second : nullptr;
+}
+std::shared_ptr<DocumentObject> Document::object(ObjectId id) const {
     auto it = m_objects.find(id);
     return it != m_objects.end() ? it->second : nullptr;
 }

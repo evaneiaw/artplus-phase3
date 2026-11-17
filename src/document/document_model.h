@@ -308,17 +308,26 @@ public:
     void addPage(std::shared_ptr<Page> page);
     void removePage(PageId id);
     std::shared_ptr<Page> page(PageId id);
+    std::shared_ptr<Page> page(PageId id) const;
     const std::vector<PageId>& pageOrder() const { return m_pageOrder; }
     std::shared_ptr<Page> currentPage() const;
 
     void addLayer(std::shared_ptr<Layer> layer);
     void removeLayer(LayerId id);
     std::shared_ptr<Layer> layer(LayerId id);
+    std::shared_ptr<Layer> layer(LayerId id) const;
     const std::vector<LayerId>& layerOrder() const { return m_layerOrder; }
 
     void addObject(std::shared_ptr<DocumentObject> obj);
     void removeObject(ObjectId id);
     std::shared_ptr<DocumentObject> object(ObjectId id);
+    std::shared_ptr<DocumentObject> object(ObjectId id) const;
+    std::vector<ObjectId> objectIds() const {
+        std::vector<ObjectId> ids;
+        ids.reserve(m_objects.size());
+        for (const auto& [id, obj] : m_objects) ids.push_back(id);
+        return ids;
+    }
     const std::unordered_map<ObjectId, std::shared_ptr<DocumentObject>>& objects() const { return m_objects; }
 
     std::vector<ObjectId> selectedObjects() const { return m_selection; }
