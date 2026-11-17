@@ -37,6 +37,8 @@ Implementado em `src/pdf/`:
 - Transformações: o parser aplica `CTM` acumulado (incluindo `cm`) nas coordenadas de todos os pontos de caminho e textos; imagens mantêm o `CTM` de exibição.
 - Coordenadas: PDF usa y-up e o modelo/Qt usa y-down; o parser aplica flip y usando `pageHeight`, alinhando com o canvas `QGraphicsView`.
 - Clipping é reconhecido (`W/W*`) e reportado como warning (`ClippedArea`), mas ainda não vira objeto `ClippingMask` no modelo — limitação documentada.
+- Form XObjects (`/Subtype /Form`) são convertidos em `GroupObject` com filhos (Path/Text) carregando transform combinado — verificado em `test_formxobject.pdf`.
+- Anotações de página (`/Annots`): importer emite warning mas não cria objeto correspondente — limitação documentada.
 
 ## 4. Edição e interface
 
@@ -73,23 +75,27 @@ Implementado em `src/pdf/`:
 
 ## 7. Testes obrigatórios
 
-`tests/fixtures/make_test_pdfs.py` gera (regenerável):
+`tests/fixtures/make_test_pdfs.py` e geradores adicionais (regeneráveis):
 
 - `test_text.pdf` — Helvetica/Times/Courier, RGB, metadata
 - `test_vector.pdf` — CMYK fill, curva Bézier, spot PANTONE 485 C, dashed line, triângulo
 - `test_images.pdf` — imagens embutidas (geradas por PIL)
 - `test_multipage.pdf` — 3 páginas com clipping e transparência
 - `test_cmyk_inks.pdf` — CMYK separável e spot custom
+- `test_formxobject.pdf` — Form XObject (`MyForm`) invocado duas vezes (one page, two doForm calls) — importer gera `GroupObject` com filhos
+- `test_unsupported.pdf` — contém anotação de link (`linkURL`) — importer emite warning `annotation(s) not yet supported`
 
 `tests/integration/pdf_smoke.cpp` valida o pipeline completo em todos os fixtures.
 `tests/unit/test_pdf_roundtrip.cpp` (CTest `PdfRoundTrip`), `tests/unit/test_editing.cpp` (CTest `EditingTests`) e `tests/unit/test_main.cpp` (CTest `UnitTests`).
 
 **Resultado atual do CTest -C Release -V:**
 ```
-test 1: UnitTests ........................ Passed
-test 2: PdfRoundTrip .................... Passed
-test 3: EditingTests .................... Passed
-100% tests passed, 0 tests failed out of 3
+test 1: FormXObjects .....................   Passed
+test 2: PdfSmoke ..........................   Passed
+test 3: UnitTests ........................   Passed
+test 4: PdfRoundTrip .....................   Passed
+test 5: EditingTests .....................   Passed
+100% tests passed out of 5
 ```
 
 ## 8. Entrega
