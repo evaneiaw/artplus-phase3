@@ -117,7 +117,7 @@ struct Gradient {
 
 class DocumentObject : public std::enable_shared_from_this<DocumentObject> {
 public:
-    DocumentObject(ObjectType type) : m_type(type), m_id(nextObjectId++) {}
+    DocumentObject(ObjectType type) : m_type(type), m_id(nextObjectId++), m_name("") {}
     virtual ~DocumentObject() = default;
 
     ObjectId id() const { return m_id; }

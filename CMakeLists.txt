@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Test)
 
+# O Qt 6.8.3 mingw_64 pré-compilado usa a CRT MSVCRT (msvcrt.dll).
+# Misturar executáveis compilados contra UCRT com DLLs MSVCRT do Qt
+# corrompe o heap (ex.: QArrayDataPointer::~QArrayDataPointer -> free de ponteiro inválido).
+# Use o toolchain WinLibs POSIX.MSVCRT (ver CMakePresets.json: preset "mingw-msvcrt").
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -31,3 +36,6 @@ add_executable(unit_tests
 target_link_libraries(unit_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
 add_test(NAME UnitTests COMMAND unit_tests)
 
+# O Qt pré-compilado carrega sua própria libstdc++/libwinpthread do diretório bin do Qt.
+# O runtime correto resolve dlls a partir de C:/Qt/6.8.3/mingw_64/bin.
+set_tests_properties(UnitTests PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")

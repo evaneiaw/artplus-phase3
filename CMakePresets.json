@@ -1,0 +1,35 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "mingw-msvcrt",
+            "displayName": "MinGW GCC 16.2.0 + MSVCRT (compatível Qt 6.8.3 mingw_64)",
+            "description": "Usa o toolchain WinLibs POSIX.MSVCRT, pois o Qt 6.8.3 mingw_64 foi compilado com GCC 13/msvcrt. Executáveis UCRT misturam heaps e corrompem a memória.",
+            "binaryDir": "${sourceDir}/build",
+            "generator": "MinGW Makefiles",
+            "cacheVariables": {
+                "CMAKE_PREFIX_PATH": "C:/Qt/6.8.3/mingw_64",
+                "CMAKE_C_COMPILER": "C:/Users/Evanei/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin/gcc.exe",
+                "CMAKE_CXX_COMPILER": "C:/Users/Evanei/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin/g++.exe"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "release-mingw",
+            "configurePreset": "mingw-msvcrt",
+            "configuration": "Release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "unit-tests",
+            "configurePreset": "mingw-msvcrt",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "verbose"
+            }
+        }
+    ]
+}
