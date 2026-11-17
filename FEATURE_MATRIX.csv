@@ -1,0 +1,12 @@
+# FEATURE_MATRIX.csv
+Feature,Status,Priority,Category,Notes
+Open Document,Not Started,High,File,PDF/PDF+
+Save Document,Not Started,High,File,
+Zoom/Pan,Not Started,Medium,View,
+Object Selection,Not Started,High,Selection,
+Undo/Redo,Not Started,High,Edit,
+Layers,Not Started,Medium,Document,
+Separations,Not Started,High,Colors,
+Preflight,Not Started,Medium,Quality,
+Step & Repeat,Not Started,Low,Production,
+Trapping,Not Started,Low,Prepress,

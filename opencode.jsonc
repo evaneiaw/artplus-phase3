@@ -1,0 +1,15 @@
+{
+  "project": "ArtPlus",
+  "version": "0.1.0",
+  "agents": {
+    "architect": { "file": ".opencode/agents/architect.md" },
+    "reverse-engineer": { "file": ".opencode/agents/reverse-engineer.md" },
+    "pdf-engine": { "file": ".opencode/agents/pdf-engine.md" },
+    "geometry-engine": { "file": ".opencode/agents/geometry-engine.md" },
+    "prepress-engine": { "file": ".opencode/agents/prepress-engine.md" },
+    "production-engine": { "file": ".opencode/agents/production-engine.md" },
+    "ui-specialist": { "file": ".opencode/agents/ui-specialist.md" },
+    "qa-engineer": { "file": ".opencode/agents/qa-engineer.md" },
+    "security-license-auditor": { "file": ".opencode/agents/security-license-auditor.md" }
+  }
+}
