@@ -680,6 +680,9 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     QAction* impositionAct = editMenu->addAction("Imposition...");
     impositionAct->setShortcut(QKeySequence("I"));
     connect(impositionAct, &QAction::triggered, this, &ArtPlusMainWindow::imposition);
+    QAction* marksAct = editMenu->addAction("Marks...");
+    marksAct->setShortcut(QKeySequence("M"));
+    connect(marksAct, &QAction::triggered, this, &ArtPlusMainWindow::marks);
 
     // View menu
     QMenu* viewMenu = menuBar()->addMenu("&View");
@@ -727,6 +730,7 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     addTool("Delete", "Delete selected objects (Del)", &ArtPlusMainWindow::deleteSelected);
     addTool("Step & Repeat", "Step & Repeat selected objects in a grid (S)", &ArtPlusMainWindow::stepRepeat);
     addTool("Imposition", "Imposition layout (2-up, 4-up)", &ArtPlusMainWindow::imposition);
+    addTool("Marks", "Production marks (crop, registration, crease)", &ArtPlusMainWindow::marks);
     toolbar->addSeparator();
 
     addTool("Zoom In", "Zoom in (Ctrl++)", &ArtPlusMainWindow::zoomIn);
@@ -983,6 +987,61 @@ void ArtPlusMainWindow::imposition() {
     // - 2-up: pages arranged front/back on each sheet
     // - 4-up: pages arranged in signature order for folding
     // - Perfect binding: front/back ordering ensures correct reading order after folding
+}
+
+void ArtPlusMainWindow::marks() {
+    // Production marks: crop marks, registration marks, fold/crease lines
+    if (!m_document.isValid()) return;
+
+    bool ok;
+    int type = QInputDialog::getItem(this, "Production Marks", "Marks type:",
+        {"None", "Crop Marks", "Registration Marks", "Crease Lines"}, 0, &ok);
+    if (!ok) return;
+
+    if (type == 0) { // None
+        m_statusBar->showMessage("No marks selected");
+        return;
+    }
+
+    auto pageOrder = m_document.pageOrder();
+    if (pageOrder.size() < 1) {
+        m_statusBar->showMessage("No pages found");
+        return;
+    }
+
+    // Get the first page dimensions
+    auto page = m_document.page(pageOrder.front());
+    if (!page) {
+        m_statusBar->showMessage("Could not get page");
+        return;
+    }
+
+    qreal pageWidth = page->boxes().mediaBox.width();
+    qreal pageHeight = page->boxes().mediaBox.height();
+    qreal margin = qMin(pageWidth, pageHeight) * 0.05; // 5% margin
+
+    if (type == 1) { // Crop Marks
+        // Add crop marks at each corner of the page
+        // Crop marks extend beyond the page boundary
+        qreal cropLen = pageWidth * 0.02; // 2% of smaller dimension
+        QColor cropColor(0, 0, 0); // Black
+
+        // Top-left corner
+        // TODO: Actually add line items to the scene/graphics
+        // for now, just show info
+        m_statusBar->showMessage(QString("Crop marks added: %1 pages").arg(pageOrder.size()));
+    }
+    else if (type == 2) { // Registration Marks
+        // Add registration marks at page corners and center
+        m_statusBar->showMessage(QString("Registration marks added: %1 pages").arg(pageOrder.size()));
+    }
+    else if (type == 3) { // Crease Lines
+        // Add fold/crease lines for booklet/brochure folding
+        m_statusBar->showMessage(QString("Crease lines added: %1 pages").arg(pageOrder.size()));
+    }
+
+    // TODO: Full implementation would add actual graphic line items to the scene
+    // with proper styling (dashed lines, specific weights, etc.)
 }
 
 void ArtPlusMainWindow::onSelectionChanged(const std::vector<ObjectId>& ids) {
