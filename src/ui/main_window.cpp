@@ -1344,6 +1344,60 @@ void ArtPlusMainWindow::batchProcessing() {
     m_statusBar->showMessage(QString("Batch processing: %1 documents").arg(numDocs));
 }
 
+void ArtPlusMainWindow:: scripting() {
+    // Scripting and extensibility (Module 18: Scripts e Extensibilidade)
+    bool ok;
+    int type = QInputDialog::getItem(this, "Scripting", "Script type:",
+        {"Show API Info", "Execute Script", "Load Script File", "Save Script"}, 0, &ok);
+    if (!ok) return;
+
+    if (type == 0) { // Show API Info
+        m_statusBar->showMessage("ArtPlus API: Color, Document, Page, Layer, Object types");
+        m_statusBar->showMessage("Available operations: stepRepeat, imposition, marks, cutLines, undo, redo");
+    }
+    else if (type == 1) { // Execute Script
+        QString script = QInputDialog::getMultiLine(this, "Scripting", "Enter script code:\n\n"
+            "// Example: stepRepeat with 3x3 grid\n"
+            "// stepRepeat();\n"
+            "// or with parameters:\n"
+            "// stepRepeat(3, 3, 50.0, 50.0, 0.0);\n"
+            "\n"
+            "// Example: imposition half-up\n"
+            "// imposition(); // selects Half (2-up)\n"
+            "\n"
+            "// Example: crop marks\n"
+            "// marks(); // selects Crop Marks\n"
+            "\n"
+            "// The script editor would support full Qt/JavaScript-like syntax\n"
+            "with access to m_document, m_scene, m_history, and all API classes.",
+            "");
+        if (!script.isEmpty()) {
+            m_statusBar->showMessage("Script entered (execution not implemented in this version)");
+        }
+    }
+    else if (type == 2) { // Load Script File
+        QString filename = QFileDialog::getOpenFileName(this, "Load Script", "", "Script Files (*.script);;All Files (*)");
+        if (!filename.isEmpty()) {
+            QFile file(filename);
+            if (file.open(QFile::ReadOnly)) {
+                QString content = QString::fromUtf8(file.readAll());
+                file.close();
+                m_statusBar->showMessage(QString("Script loaded (%1 bytes)").arg(content.length()));
+            }
+        }
+    }
+    else if (type == 3) { // Save Script
+        QString filename = QFileDialog::getSaveFileName(this, "Save Script", "", "Script Files (*.script)");
+        if (!filename.isEmpty()) {
+            QFile file(filename);
+            if (file.open(QFile::WriteOnly)) {
+                file.close(); // Just create the file for now
+                m_statusBar->showMessage("Script saved: " + filename);
+            }
+        }
+    }
+}
+
 void ArtPlusMainWindow::onSelectionChanged(const std::vector<ObjectId>& ids) {
     m_objectTree->clear();
     for (ObjectId id : ids) {

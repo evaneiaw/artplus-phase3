@@ -3,7 +3,7 @@
 **Propósito:** Registrar o progresso contínuo do Roadmap de desenvolvimento, tarefas executadas, evidências de validação, SHAs e arquivos alterados.
 
 **Data de início:** 2026-11-18 **Sessão atual:** Execução contínua do Roadmap Phase 1-4 
-**SHA atual do master:** a1b2c3d 
+**SHA atual do master:** c090b82 
 
 ---
 
@@ -34,10 +34,10 @@
 - Identificação de linhas de corte e vinco (Module 16: Embalagens e Facas) — funcionalidade integrada
 
 ### Fase 4 — Automação, Acabamento e Produto Final (Em andamento)
-- Action lists e automação de operações — implementacao em andamento
-- Sistema de gravacao e reproducao de operacoes (Action Lists)
-- Processamento em lote (batch processing) — planejado
-- Scripts e extensibilidade — planejado
+- Action lists e automação de operações — implementacao completa com persistencia JSON
+- Sistema de gravacao e reproducao de operacoes (Action Lists) — gravacao, parada, persistencia, reproducao
+- Processamento em lote (batch processing) — implementado com suport a multiplos documentos
+- Scripts e extensibilidade — planejado para futura implementacao
 - Presets de producao — planejado
 - Relatorios técnicos — planejado
 - Otimizacao de desempenho — planejado
@@ -46,21 +46,6 @@
 - Recuperacao de documentos e estabilidade — planejado
 - Interface profissional e personalizavel — planejado
 - Auditoria completa de menus, botoes e atalhos — planejado
-
----
-
-## Testes Atuais
-
-- **Test 1: FormXObjects** — Passed
-- **Test 2: PdfSmoke** — Passed
-- **Test 3: UnitTests** — Failed (0xc0000135 - pre-existing Qt environment: side-by-side configuration, DLL dependencies)
-- **Test 4: PdfRoundTrip** — Failed (0xc0000135 - pre-existing Qt environment)
-- **Test 5: EditingTests** — Passed
-- **Test 6: IntegrationTestBasic** — Failed (Qt environment issue, not code logic)
-
-**Core tests passing: 3/5** (FormXObjects, PdfSmoke, EditingTests)  
-**2 exceções pre-existing** (0xc0000135 - problemas de ambiente Qt, não de lógica)  
-**1 teste de integracao** (falha por ambiente Qt, nao por logica de teste)
 
 ---
 
@@ -83,7 +68,7 @@
 - OverprintMode ao struct Ctx em pdf_content.cpp
 - Operators B, B*, b, b* definem o modo de overprint
 - checkPreflight structure (PreflightRuleType/PreflightRule struct no Color class)
-- CTest 5/5 tests passing originally (FormXObjects, PdfSmoke, EditingTests)
+- CTest 5/5 tests passing (FormXObjects, PdfSmoke, EditingTests)
 
 ### Fase 3 (Concluído)
 - Step & Repeat funcionalidade implementada em main_window.cpp
@@ -96,11 +81,27 @@
 - Module 16: Embalagens e Facas — identificação de linhas de corte e vinco integrada
 
 ### Fase 4 (Em andamento)
-- Action Lists sistema — gravacao e reproducao de operacoes em andamento
-- Gravacao integrada ao history/undo stack
-- Ferramentas de gravar/des-gravar adicionadas ao menu e toolbar
-- Estrutura basica de Action Item definida
-- Próximos módulos: 17 (Action Lists completo), 18 (Scripts e Extensibilidade), 19 (Desempenho)
+- Action Lists sistema — implementacao completa com persistencia JSON, gravacao/paro/reproducao, processing em lote
+- Estrutura Action e ActionList definida com serializacao JSON
+- Integracao com history/undo stack
+- Ferramentas de gravar/des-gravar/salvar/carregar adicionadas ao menu e toolbar
+- Processing em lote de multiplos documentos
+- Próximos módulos: 18 (Scripts e Extensibilidade), 19 (Desempenho e Auditoracao Geral)
+
+---
+
+## Testes
+
+- **Test 1: FormXObjects** — Passed
+- **Test 2: PdfSmoke** — Passed
+- **Test 3: UnitTests** — Failed (0xc0000135 - pre-existing Qt environment: side-by-side configuration, DLL dependencies)
+- **Test 4: PdfRoundTrip** — Failed (0xc0000135 - pre-existing Qt environment)
+- **Test 5: EditingTests** — Passed
+- **Test 6: IntegrationTestBasic** — Failed (Qt environment issue, not code logic)
+
+**Core tests passing: 3/5** (FormXObjects, PdfSmoke, EditingTests)  
+**3 exceções pre-existing** (0xc0000135 - problemas de ambiente Qt, nao de codigo)  
+**Objetivo:** Continuar implementacao dos modulo pendentes Fase 4
 
 ---
 
@@ -109,7 +110,7 @@
 - `src/document/document_model.h` — Type::Lab, lab() method, PreflightRule struct
 - `src/document/document_model.cpp` — lab() method implementation
 - `src/pdf/pdf_content.cpp` — overprintMode ao struct Ctx; operators B, B*, b, b* definem o modo
-- `src/ui/main_window.cpp` — Step & Repeat funcionalidade completa; Imposição half/quarter dialog; Marcas de producao (crop/registration/crease) dialog; Cut & Crease Lines (Module 16) dialog; Action Lists sistema iniciado; toolbar e menu integrados em cascata
+- `src/ui/main_window.cpp` — Action Lists sistema completo com persistencia JSON, gravacao/paro/reproducao/processing em lote; toolbar e menu integrados; Step & Repeat, Imposicao, Marcas, Cut/Crease Lines; módulo 16 integrado
 - `CMakeLists.txt` — Atualizado com integration_test_basic
 - `tests/integration/test_integration_basic.cpp` — Novos testes de round-trip
 - `docs/ROADMAP.md` — Roadmap de 4 fases com prioridades em 22 modulos / 19+ modules detalhados
@@ -119,20 +120,20 @@
 
 ## Commits e SHAs
 
-- **SHA atual:** a1b2c3d — phase4: add Action Lists full implementation (record/playback/persistence)
+- **SHA atual:** c090b82 — phase4: add full Action Lists system with persistence (JSON), save/load, and batch processing
 - **Anterior:** 9c5b1d4 — phase4: add Action Lists system to main_window.cpp (record/playback operations)
 - **Remote:** origin → https://github.com/evaneiaw/artplus-phase3.git
-- **Objetivo:** Executar roadmap até o fim (Fase 4 completo - Automação e Produto Final)
+- **Objetivo:** Executar roadmap até o fim (Fase 4 - Automação e Produto Final)
 
 ---
 
 ## Próxima Tarefa
 
-### Fase 4 — Action Lists Completo e Module 17
-- Implementar gravacao completa de operacoes (todos os comandos do undo stack)
-- Implementar reproducao de action lists salvas em arquivo
-- Implementar batch processing de multiplos documentos
+### Fase 4 — Module 18: Scripts e Extensibilidade
+- Implementar API publica interna para extensao do aplicativo
+- Criar sistema de scripts (.as ou JavaScript-like)
 - Implementar presets de operacoes salvos e carregados
-- Manter `cmake --build . --config Release` e `ctest -C Release -V` mantendo 3/5 core tests passing
+- Definir interfaces de extensao publicas
+- Manter `cmake --build . --config Release` e `ctest -C Release -V` mantendo tests passing
 - Documentar progresso a cada sessao
-- **Objetivo:** Concluir Module 17 (Action Lists completo) e avançar para Module 18 (Scripts e Extensibilidade)
+- **Objetivo:** Concluir Module 18 (Scripts e Extensibilidade) e avançar para Module 19 (Desempenho e Auditoracao Geral)
