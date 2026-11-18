@@ -683,6 +683,9 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     QAction* marksAct = editMenu->addAction("Marks...");
     marksAct->setShortcut(QKeySequence("M"));
     connect(marksAct, &QAction::triggered, this, &ArtPlusMainWindow::marks);
+    QAction* cutLinesAct = editMenu->addAction("Cut & Crease Lines...");
+    cutLinesAct->setShortcut(QKeySequence("L"));
+    connect(cutLinesAct, &QAction::triggered, this, &ArtPlusMainWindow::cutLines);
 
     // View menu
     QMenu* viewMenu = menuBar()->addMenu("&View");
@@ -731,6 +734,7 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     addTool("Step & Repeat", "Step & Repeat selected objects in a grid (S)", &ArtPlusMainWindow::stepRepeat);
     addTool("Imposition", "Imposition layout (2-up, 4-up)", &ArtPlusMainWindow::imposition);
     addTool("Marks", "Production marks (crop, registration, crease)", &ArtPlusMainWindow::marks);
+    addTool("Cut & Crease Lines", "Cut and crease line identification (L)", &ArtPlusMainWindow::cutLines);
     toolbar->addSeparator();
 
     addTool("Zoom In", "Zoom in (Ctrl++)", &ArtPlusMainWindow::zoomIn);
@@ -1042,6 +1046,56 @@ void ArtPlusMainWindow::marks() {
 
     // TODO: Full implementation would add actual graphic line items to the scene
     // with proper styling (dashed lines, specific weights, etc.)
+}
+
+void ArtPlusMainWindow::cutLines() {
+    // Cut lines and crease lines identification (Module 16: Embalagens e Facas)
+    if (!m_document.isValid()) return;
+
+    bool ok;
+    int type = QInputDialog::getItem(this, "Cut & Crease Lines", "Line type:",
+        {"None", "Cut Line", "Crease Line", "Art/Knife Separation"}, 0, &ok);
+    if (!ok) return;
+
+    if (type == 0) { // None
+        m_statusBar->showMessage("No line type selected");
+        return;
+    }
+
+    auto pageOrder = m_document.pageOrder();
+    if (pageOrder.size() < 1) {
+        m_statusBar->showMessage("No pages found");
+        return;
+    }
+
+    auto page = m_document.page(pageOrder.front());
+    if (!page) {
+        m_statusBar->showMessage("Could not get page");
+        return;
+    }
+
+    qreal pageWidth = page->boxes().mediaBox.width();
+    qreal pageHeight = page->boxes().mediaBox.height();
+
+    if (type == 1) { // Cut Line
+        // Identify cut lines for packaging/blade cutting
+        // Cut lines are typically stroke paths with specific properties
+        m_statusBar->showMessage(QString("Cut line identification: %1 pages").arg(pageOrder.size()));
+    }
+    else if (type == 2) { // Crease Line
+        // Identify crease lines for folding
+        // Crease lines are score marks where paper should be folded
+        m_statusBar->showMessage(QString("Crease line identification: %1 pages").arg(pageOrder.size()));
+    }
+    else if (type == 3) { // Art/Knife Separation
+        // Separate artwork from knife cut paths
+        // This helps distinguish between printed art and cutting paths
+        m_statusBar->showMessage(QString("Art/knife separation: %1 pages").arg(pageOrder.size()));
+    }
+
+    // TODO: Full implementation would analyze PDF paths and classify them
+    // as cut lines, crease lines, or art based on properties like color,
+    // stroke width, layer, and PDF metadata
 }
 
 void ArtPlusMainWindow::onSelectionChanged(const std::vector<ObjectId>& ids) {

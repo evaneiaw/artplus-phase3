@@ -3,7 +3,7 @@
 **Propósito:** Registrar o progresso contínuo do Roadmap de desenvolvimento, tarefas executadas, evidências de validação, SHAs e arquivos alterados.
 
 **Data de início:** 2026-11-18 **Sessão atual:** Execução contínua do Roadmap Phase 1-4 
-**SHA atual do master:** b208f05 
+**SHA atual do master:** 174f999 
 
 ---
 
@@ -29,8 +29,9 @@
 - Command buffer para undo/redo support
 - Toolbar button e menu item Edit integrados
 - Rebuild scene após operação
-- Imposição de páginas (half/quarter) — implementado dialog e lógica básica de arranjo de páginas
-- Marcas de produção e registro — próximo passo
+- Imposição de páginas (half/quarter) — dialog de seleção de tipo, contagem de sheets calculada
+- Marcas de produção (crop, registration, crease) — implementado dialog e lógica básica
+- Próximo passo: Linhas de corte e vinco (Module 16 - Embalagens e Facas)
 
 ### Fase 4 — Automação, Acabamento e Produto Final
 - Action lists e automação de operações
@@ -75,7 +76,8 @@
 - Toolbar button e menu item Edit integrados
 - Rebuild scene após operação
 - Imposição de páginas (half/quarter) — dialog de seleção de tipo, contagem de sheets calculada
-- Próximo passo: Marcas de produção e linhas de corte/vinco
+- Marcas de produção (crop, registration, crease) — dialog de tipo integrado ao menu e toolbar
+- Próximo passo: Linhas de corte e vinco (Module 16)
 
 ---
 
@@ -93,7 +95,7 @@
 - `src/document/document_model.h` — Type::Lab, lab() method, PreflightRule struct
 - `src/document/document_model.cpp` — lab() method implementation
 - `src/pdf/pdf_content.cpp` — overprintMode ao struct Ctx; operators B, B*, b, b* definem o modo
-- `src/ui/main_window.cpp` — Step & Repeat funcionalidade completa; Imposição half/quarter dialog; toolbar e menu integrados
+- `src/ui/main_window.cpp` — Step & Repeat funcionalidade completa; Imposição half/quarter dialog; Marcas de produção (crop/registration/crease) dialog; toolbar e menu integrados em cascata
 - `CMakeLists.txt` — Atualizado com integration_test_basic
 - `tests/integration/test_integration_basic.cpp` — Novos testes de round-trip
 - `docs/ROADMAP.md` — Roadmap de 4 fases com prioridades em 22 modulos / 19+ modules detalhados
@@ -103,8 +105,8 @@
 
 ## Commits e SHAs
 
-- **SHA atual:** b208f05 — phase3: add imposition functionality to main_window.cpp (half/quarter imposition dialog)
-- **Anterior:** 0d3ebd8 — phase3: add step & repeat functionality to main_window.cpp (toolbar, menu, dialog, grid operations)
+- **SHA atual:** 174f999 — phase3: add production marks (crop, registration, crease) to main_window.cpp
+- **Anterior:** b208f05 — phase3: add imposition functionality to main_window.cpp (half/quarter imposition dialog)
 - **Remote:** origin → https://github.com/evaneiaw/artplus-phase3.git
 - **Objetivo:** Executar roadmap até o fim (Fases 3 e 4)
 
@@ -112,11 +114,13 @@
 
 ## Próxima Tarefa
 
-### Fase 3 — Marcas de Produção e Linhas de Corte
-- Implementar marcas de corte (crop marks) para exportação PDF
-- Implementar marcas de registro (registration marks)
-- Implementar linhas de vinco (crease lines) para dobras
-- Implementar identificação de linhas de corte e vinco (Module 16)
+### Fase 3/Module 16 — Linhas de Corte e Vinco (Embalagens e Facas)
+- Implementar identificação de linhas de corte (cut lines)
+- Implementar identificação de linhas de vinco (crease lines / score lines)
+- Implementar separação entre arte e faca (art vs knife separation)
+- Implementar gerenciamento de cores técnicas (technical colors)
+- Visualização de faca na tela
+- Preparação de embalagem (packaging setup)
 - Manter `cmake --build . --config Release` e `ctest -C Release -V` mantendo tests passing
 - Documentar progresso a cada sessao
-- **Objetivo:** Concluir Module 15 (Imposition e Montage) e avançar para Module 16 (Embalagens e Facas)
+- **Objetivo:** Concluir Module 16 (Embalagens e Facas) e avançar para Module 17 (Automação e Processamento em Lote - Fase 4)
