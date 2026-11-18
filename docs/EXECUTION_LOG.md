@@ -3,7 +3,7 @@
 **Propósito:** Registrar o progresso contínuo do Roadmap de desenvolvimento, tarefas executadas, evidências de validação, SHAs e arquivos alterados.
 
 **Data de início:** 2026-11-18 **Sessão atual:** Execução contínua do Roadmap Phase 1-4 (Sessão de validação e continuidade)
-**SHA atual do master:** 79a0337
+**SHA atual do master:** c753867
 
 ---
 
@@ -50,9 +50,9 @@
 
 | Teste | No ctest | Direto do build | Conclusao |
 |-------|----------|-----------------|-----------|
-| **FormXObjects** | Passed (0.03s) | Passed | Igual em ambos — codigo OK |
+| **FormXObjects** | Passed (0.02s) | Passed | Igual em ambos — codigo OK |
 | **PdfSmoke** | Passed (0.04s) | Passed | Igual em ambos — codigo OK |
-| **EditingTests** | Passed (0.04s) | Passed | Igual em ambos — codigo OK |
+| **EditingTests** | Passed (0.03s) | Passed | Igual em ambos — codigo OK |
 | **UnitTests** | 0xc0000135 | Passed | Apenas ctest — ambiente Qt side-by-side |
 | **PdfRoundTrip** | 0xc0000135 | Passed | Apenas ctest — ambiente Qt side-by-side |
 | **IntegrationTestBasic** | Failed | Passed | Apenas ctest — ambiente Qt side-by-side |
@@ -69,11 +69,11 @@
 
 | Teste | Status | Observacao |
 |-------|--------|------------|
-| **Test 1: FormXObjects** | ✅ Passed (0.03s) | Validado em ambos ambientes (ctest + directo) — passing |
+| **Test 1: FormXObjects** | ✅ Passed (0.02s) | Validado em ambos ambientes (ctest + directo) — passing |
 | **Test 2: PdfSmoke** | ✅ Passed (0.04s) | Validado em ambos ambientes (ctest + directo) — passing |
 | **Test 3: UnitTests** | ⚠ Pass (direto) / Fail (ctest) | 0xc0000135 apenas no runner ctest — confirmado ambiente Qt |
 | **Test 4: PdfRoundTrip** | ⚠ Pass (direto) / Fail (ctest) | 0xc0000135 apenas no runner ctest — confirmado ambiente Qt |
-| **Test 5: EditingTests** | ✅ Passed (0.04s) | Validado em ambos ambientes (ctest + directo) — passing |
+| **Test 5: EditingTests** | ✅ Passed (0.03s) | Validado em ambos ambientes (ctest + directo) — passing |
 | **Test 6: IntegrationTestBasic** | ⚠ Fail (ctest only) | Ambiente Qt, nao logica de teste |
 
 **Core tests passing: 3/5** (FormXObjects, PdfSmoke, EditingTests) — validadas em ambos ambientes  
@@ -183,6 +183,7 @@
 ## Commits e SHAs
 
 ```bash
+c753867 — continue: roadmap execution ongoing (22/22 modules, 3/5 core tests passing validated, 0xc0000135 confirmed ctest environment issue)
 79a0337 — continue: roadmap execution ongoing (22/22 modules, 3/5 core tests passing, 0xc0000135 confirmed as ctest environment issue)
 d9afd37 — continue: Fase 4 items implemented (batch processing, presets, reports, performance, recovery) + 0xc0000135 investigation + roadmap execution ongoing (22/22 modules)
 7c69545 — continue: ctest validation update + 0xc0000135 investigation + roadmap execution ongoing (3/5 core tests passing, 21/22 modules, Fase 4 continued)
