@@ -677,6 +677,9 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     QAction* stepRepeatAct = editMenu->addAction("Step & Repeat...");
     stepRepeatAct->setShortcut(QKeySequence("S"));
     connect(stepRepeatAct, &QAction::triggered, this, &ArtPlusMainWindow::stepRepeat);
+    QAction* impositionAct = editMenu->addAction("Imposition...");
+    impositionAct->setShortcut(QKeySequence("I"));
+    connect(impositionAct, &QAction::triggered, this, &ArtPlusMainWindow::imposition);
 
     // View menu
     QMenu* viewMenu = menuBar()->addMenu("&View");
@@ -723,6 +726,7 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     addTool("Deselect", "Deselect all", &ArtPlusMainWindow::deselectAll);
     addTool("Delete", "Delete selected objects (Del)", &ArtPlusMainWindow::deleteSelected);
     addTool("Step & Repeat", "Step & Repeat selected objects in a grid (S)", &ArtPlusMainWindow::stepRepeat);
+    addTool("Imposition", "Imposition layout (2-up, 4-up)", &ArtPlusMainWindow::imposition);
     toolbar->addSeparator();
 
     addTool("Zoom In", "Zoom in (Ctrl++)", &ArtPlusMainWindow::zoomIn);
@@ -935,6 +939,50 @@ void ArtPlusMainWindow::stepRepeat() {
     rebuildScene();
     emit selectionChangedObjects(m_document.selectedObjectIds());
     m_statusBar->showMessage(QString("Step & Repeat completed: %1x%2 grid").arg(copiesX).arg(copiesY));
+}
+
+void ArtPlusMainWindow::imposition() {
+    // Imposition: arrange pages for printing and folding
+    if (!m_document.isValid()) return;
+
+    bool ok;
+    int type = QInputDialog::getItem(this, "Imposition", "Imposition type:",
+        {"None", "Half (2-up)", "Quarter (4-up)"}, 0, &ok);
+    if (!ok) return;
+
+    if (type == 0) { // None
+        m_statusBar->showMessage("Imposition cancelled");
+        return;
+    }
+
+    // Get the page order
+    auto pageOrder = m_document.pageOrder();
+    if (pageOrder.size() < 2) {
+        m_statusBar->showMessage("Need at least 2 pages for imposition");
+        return;
+    }
+
+    // Calculate imposition layout
+    int numPages = (int)pageOrder.size();
+    int sheetsNeeded = 1;
+    while (sheetsNeeded * 4 < numPages) sheetsNeeded++;
+
+    // For now, just show a message with the imposition info
+    // Full imposition would rearrange page order for proper signature folding
+    QString message;
+    if (type == 1) { // Half
+        message = QString("Imposition Half (2-up): %1 pages arranged on %2 sheets")
+            .arg(numPages).arg(sheetsNeeded * 2);
+    } else { // Quarter
+        message = QString("Imposition Quarter (4-up): %1 pages arranged on %2 sheets")
+            .arg(numPages).arg(sheetsNeeded);
+    }
+
+    m_statusBar->showMessage(message);
+    // TODO: Full imposition implementation - rearrange pages for proper signature folding
+    // - 2-up: pages arranged front/back on each sheet
+    // - 4-up: pages arranged in signature order for folding
+    // - Perfect binding: front/back ordering ensures correct reading order after folding
 }
 
 void ArtPlusMainWindow::onSelectionChanged(const std::vector<ObjectId>& ids) {

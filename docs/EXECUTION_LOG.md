@@ -3,7 +3,7 @@
 **Propósito:** Registrar o progresso contínuo do Roadmap de desenvolvimento, tarefas executadas, evidências de validação, SHAs e arquivos alterados.
 
 **Data de início:** 2026-11-18 **Sessão atual:** Execução contínua do Roadmap Phase 1-4 
-**SHA atual do master:** 655d0a2 
+**SHA atual do master:** 0d3ebd8 
 
 ---
 
@@ -23,12 +23,14 @@
 - Regras de preflight initial implementadas (struct PreflightRule/PreflightRuleType no Color class)
 - Commits e push para origin/master completados
 
-### Fase 3 — Produção Gráfica e Montagem (Iniciada)
+### Fase 3 — Produção Gráfica e Montagem (Em andamento)
 - Step & Repeat implementado (repetição horizontal/vertical, grid, offset, quantidade de cópias)
-- Imposição de páginas (planeado para próxima iteração)
-- Marcas de corte e registro (planeado para próxima iteração)
-- Dielines e linhas de vinco (planeado para próxima iteração)
-- Main window toolbar e menu integrados
+- Dialog para parâmetros de grid (copies X/Y, spacing, angle)
+- Command buffer para undo/redo support
+- Toolbar button e menu item Edit integrados
+- Imposição de páginas (perfect, half, quarter) — planeado para próxima iteração
+- Marcas de corte e registro — planeado para próxima iteração
+- Dielines e linhas de vinco — planeado para próxima iteração
 
 ### Fase 4 — Automação, Acabamento e Produto Final
 - Action lists e automação de operações
@@ -48,7 +50,7 @@
 ## Tarefas Concluídas
 
 ### Fase 1 (9/9 módulos)
-- 01.01 Auditar arquitetura atual — **Concluído**
+- 01.01 Auditar arququetura atual — **Concluído**
 - 01.02 Auditar modelo de documentos e objetos — **Concluído**
 - 01.03 Verificar gerenciamento de memória e propriedade dos objetos — **Concluído**
 - 01.04 Consolidar sistema de coordenadas e transformações — **Concluído**
@@ -66,7 +68,7 @@
 - checkPreflight structure (PreflightRuleType/PreflightRule struct no Color class)
 - CTest 5/5 tests passing (FormXObjects, PdfSmoke, EditingTests)
 
-### Fase 3 (Iniciada)
+### Fase 3 (Em andamento)
 - Step & Repeat funcionalidade implementada em main_window.cpp
 - Dialog para parâmetros de grid (copies X/Y, spacing, angle)
 - Command buffer para undo/redo support
@@ -99,8 +101,8 @@
 
 ## Commits e SHAs
 
-- **SHA atual:** 655d0a2 — phase3: update EXECUTION_LOG.md with Fase 2 concluded and Fase 3 initiated (step repeat, imposition, marks)
-- **Anterior:** 613b5df — phase2: update EXECUTION_LOG.md with Fase 2 progress (Lab color, overprint, preflight)
+- **SHA atual:** 0d3ebd8 — phase3: add step & repeat functionality to main_window.cpp (toolbar, menu, dialog, grid operations)
+- **Anterior:** 655d0a2 — phase3: update EXECUTION_LOG.md with Fase 2 concluded and Fase 3 initiated (step repeat, imposition, marks)
 - **Remote:** origin → https://github.com/evaneiaw/artplus-phase3.git
 - **Objetivo:** Executar roadmap até o fim (Fases 3 e 4)
 
@@ -108,7 +110,7 @@
 
 ## Próxima Tarefa
 
-### Fase 3 — Continuar implementacao de imposicao e marcas
+### Fase 3 — Imposição e Marcas
 - Implementar layouts de imposição (perfect, half, quarter)
 - Implementar marcas de corte e registro no PDF de exportação
 - Implementar dielines e linhas de vinco
