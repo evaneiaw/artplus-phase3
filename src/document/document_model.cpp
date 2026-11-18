@@ -3,6 +3,8 @@
 #include <QPainterPath>
 #include <QFont>
 #include <QFontMetrics>
+#include <QFile>
+#include <QFileInfo>
 
 namespace ArtPlus {
 
@@ -30,6 +32,43 @@ Color Color::rgb(float r, float g, float b) {
     col.type = Type::RGB;
     col.components = {r, g, b};
     return col;
+}
+
+Color Color::lab(float l, float a, float b) {
+    Color col;
+    col.type = Type::Lab;
+    col.components = {l, a, b};
+    return col;
+}
+
+bool Color::loadProfile(const QString& path) {
+    QFile file(path);
+    if (!file.open(QFile::ReadOnly)) return false;
+    QByteArray data = file.readAll();
+    file.close();
+    // TODO: Implement ICC profile loading
+    profileName = QFileInfo(path).fileName();
+    return true;
+}
+
+QByteArray Color::saveProfile(const QString& path) {
+    QFile file(path);
+    if (!file.open(QFile::WriteOnly)) return QByteArray();
+    // TODO: Implement ICC profile saving
+    profileName = QFileInfo(path).fileName();
+    QByteArray data;
+    file.write(data);
+    file.close();
+    return data;
+}
+
+QString Color::profileNameForType(Type type) {
+    switch (type) {
+        case Type::CMYK: return QString("USWebCoatedSW.icc");
+        case Type::RGB: return QString("sRGB_IEC61966-2.1.icc");
+        case Type::Lab: return QString("LabColorSpace.icc");
+        default: return QString();
+    }
 }
 
 void DocumentObject::removeChild(ObjectId id) {

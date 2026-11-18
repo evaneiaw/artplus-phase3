@@ -71,18 +71,27 @@ struct Color {
     QVector<float> components;
     QString spotName;
     float tint = 1.0f;
+    // ICC profile associated with this color (optional, for color management)
+    QString profileName;
+
+    // ICC profile methods
+    static bool loadProfile(const QString& path);
+    static QByteArray saveProfile(const QString& path);
+    static QString profileNameForType(Type type);
 
     Color() = default;
     static Color cmyk(float c, float m, float y, float k);
     static Color spot(const QString& name, float tint = 1.0f);
     static Color rgb(float r, float g, float b);
+    static Color lab(float l, float a, float b);
     bool isValid() const { return type != Type::None; }
     
     bool operator==(const Color& other) const {
         return type == other.type &&
                components == other.components &&
                spotName == other.spotName &&
-               qFuzzyCompare(tint, other.tint);
+               qFuzzyCompare(tint, other.tint) &&
+               profileName == other.profileName;
     }
     bool operator!=(const Color& other) const {
         return !(*this == other);
