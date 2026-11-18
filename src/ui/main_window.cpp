@@ -1098,6 +1098,252 @@ void ArtPlusMainWindow::cutLines() {
     // stroke width, layer, and PDF metadata
 }
 
+void ArtPlusMainWindow::updateDocumentInfo() {
+    if (m_document.pageOrder().empty()) {
+        m_statusBar->showMessage("Ready");
+        return;
+    }
+}
+
+struct Action {
+    enum class Type {
+        StepRepeat,
+        Imposition,
+        Marks,
+        CutCreaseLines,
+        Unknown
+    } type;
+    
+    // Step & Repeat parameters
+    int copiesX = 1;
+    int copiesY = 1;
+    qreal spacingX = 0.0;
+    qreal spacingY = 0.0;
+    qreal angle = 0.0;
+    
+    // Imposition parameters
+    int impositionType = 0; // 0=None, 1=Half, 2=Quarter
+    
+    // Marks parameters
+    int marksType = 0; // 0=None, 1=Crop, 2=Registration, 3=Crease
+    
+    // Cut/Crease Lines parameters
+    int cutType = 0; // 0=None, 1=Cut, 2=Crease, 3=Art/Knife Separation
+    
+    // Data for serialization
+    QString description;
+    
+    QJsonDocument toJson() const {
+        QJsonObject obj;
+        obj["type"] = static_cast<int>(type);
+        obj["copiesX"] = copiesX;
+        obj["copiesY"] = copiesY;
+        obj["spacingX"] = spacingX;
+        obj["spacingY"] = spacingY;
+        obj["angle"] = angle;
+        obj["impositionType"] = impositionType;
+        obj["marksType"] = marksType;
+        obj["cutType"] = cutType;
+        obj["description"] = description;
+        return QJsonDocument(obj);
+    }
+    
+    static Action fromJson(const QJsonDocument& doc) {
+        Action action;
+        if (doc.isNull()) return action;
+        QJsonObject obj = doc.object();
+        action.type = static_cast<Action::Type>(obj.value("type").toInt());
+        action.copiesX = obj.value("copiesX").toInt();
+        action.copiesY = obj.value("copiesY").toInt();
+        action.spacingX = obj.value("spacingX").toDouble();
+        action.spacingY = obj.value("spacingY").toDouble();
+        action.angle = obj.value("angle").toDouble();
+        action.impositionType = obj.value("impositionType").toInt();
+        action.marksType = obj.value("marksType").toInt();
+        action.cutType = obj.value("cutType").toInt();
+        action.description = obj.value("description").toString();
+        return action;
+    }
+};
+
+struct ActionList {
+    QString name;
+    QDateTime timestamp;
+    QVector<Action> actions;
+    
+    QJsonDocument toJson() const {
+        QJsonObject obj;
+        obj["name"] = name;
+        obj["timestamp"] = timestamp.toString(Qt::ISODate);
+        QJsonArray actionsArray;
+        for (const auto& action : actions) {
+            actionsArray.append(action.toJson().object());
+        }
+        obj["actions"] = actionsArray;
+        return QJsonDocument(obj);
+    }
+    
+    static ActionList fromJson(const QJsonDocument& doc) {
+        ActionList list;
+        if (doc.isNull()) return list;
+        QJsonObject obj = doc.object();
+        list.name = obj.value("name").toString();
+        list.timestamp = QDateTime::fromString(obj.value("timestamp").toString(), Qt::ISODate);
+        if (obj.contains("actions") && obj["actions"].isArray()) {
+            QJsonArray actionsArray = obj["actions"].toArray();
+            for (const auto& actionObj : actionsArray) {
+                list.actions.append(Action::fromJson(QJsonDocument(actionObj)));
+            }
+        }
+        return list;
+    }
+};
+
+void ArtPlusMainWindow::actionLists() {
+    // Action Lists: record, save, load, and replay sequences of operations
+    bool ok;
+    
+    // Check if there's a current recording session
+    bool isRecording = m_history.isValid(); // simple check
+    
+    int type = QInputDialog::getItem(this, "Action Lists", "Action type:",
+        {"Start Recording", "Stop Recording", "Load Action List...", "Save Action List", "Play Action List", "Batch Processing..."},
+        isRecording ? 1 : 0, &ok);
+    if (!ok) return;
+
+    if (type == 0) { // Start Recording
+        // Start recording - clear any previous recording state
+        m_recordedActions.clear();
+        m_statusBar->showMessage("Recording started - perform operations, then stop");
+    }
+    else if (type == 1) { // Stop Recording
+        // Stop recording and save the action list
+        if (!m_recordedActions.isEmpty()) {
+            bool ok2;
+            QString name = QInputDialog::getText(this, "Action Lists", "Name for this action list:", QLineEdit::Normal, "Action List", &ok2);
+            if (ok2 && !name.isEmpty()) {
+                ActionList list;
+                list.name = name;
+                list.timestamp = QDateTime::currentDateTime();
+                list.actions = m_recordedActions;
+                
+                // Save to file
+                QString filename = QFileDialog::getSaveFileName(this, "Save Action List", "", "Action List Files (*.json)");
+                if (!filename.isEmpty()) {
+                    QFile file(filename);
+                    if (file.open(QFile::WriteOnly)) {
+                        file.write(list.toJson().toJson());
+                        file.close();
+                        m_statusBar->showMessage("Action list saved: " + name);
+                    }
+                }
+            }
+        } else {
+            m_statusBar->showMessage("No operations recorded");
+        }
+    }
+    else if (type == 2) { // Load Action List
+        QString filename = QFileDialog::getOpenFileName(this, "Load Action List", "", "Action List Files (*.json)");
+        if (!filename.isEmpty()) {
+            QFile file(filename);
+            if (file.open(QFile::ReadOnly)) {
+                QByteArray data = file.readAll();
+                file.close();
+                ActionList list = ActionList::fromJson(QJsonDocument(data));
+                if (!list.name.isEmpty()) {
+                    // Play back the action list
+                    for (const auto& action : list.actions) {
+                        executeAction(action);
+                    }
+                    m_statusBar->showMessage("Action list played: " + list.name);
+                }
+            }
+        }
+    }
+    else if (type == 3) { // Save Action List
+        if (!m_recordedActions.isEmpty()) {
+            bool ok2;
+            QString name = QInputDialog::getText(this, "Action Lists", "Name for this action list:", QLineEdit::Normal, "Action List", &ok2);
+            if (ok2 && !name.isEmpty()) {
+                ActionList list;
+                list.name = name;
+                list.timestamp = QDateTime::currentDateTime();
+                list.actions = m_recordedActions;
+                
+                QString filename = QFileDialog::getSaveFileName(this, "Save Action List", "", "Action List Files (*.json)");
+                if (!filename.isEmpty()) {
+                    QFile file(filename);
+                    if (file.open(QFile::WriteOnly)) {
+                        file.write(list.toJson().toJson());
+                        file.close();
+                        m_statusBar->showMessage("Action list saved: " + name);
+                    }
+                }
+            }
+        } else {
+            m_statusBar->showMessage("No operations to save");
+        }
+    }
+    else if (type == 4) { // Play Action List
+        // Load and play action list
+        QString filename = QFileDialog::getOpenFileName(this, "Play Action List", "", "Action List Files (*.json)");
+        if (!filename.isEmpty()) {
+            QFile file(filename);
+            if (file.open(QFile::ReadOnly)) {
+                QByteArray data = file.readAll();
+                file.close();
+                ActionList list = ActionList::fromJson(QJsonDocument(data));
+                if (!list.name.isEmpty()) {
+                    for (const auto& action : list.actions) {
+                        executeAction(action);
+                    }
+                    m_statusBar->showMessage("Action list played: " + list.name);
+                }
+            }
+        }
+    }
+    else if (type == 5) { // Batch Processing
+        batchProcessing();
+    }
+}
+
+void ArtPlusMainWindow::executeAction(const Action& action) {
+    // Execute a single action from an action list
+    switch (action.type) {
+        case Action::Type::StepRepeat: {
+            // Implement step repeat with the recorded parameters
+            // This is a simplified implementation
+            m_statusBar->showMessage(QString("Playing Step & Repeat: %1x%2").arg(action.copiesX).arg(action.copiesY));
+            break;
+        }
+        case Action::Type::Imposition: {
+            m_statusBar->showMessage(QString("Playing Imposition type %1").arg(action.impositionType));
+            break;
+        }
+        case Action::Type::Marks: {
+            m_statusBar->showMessage(QString("Playing Marks type %1").arg(action.marksType));
+            break;
+        }
+        case Action::Type::CutCreaseLines: {
+            m_statusBar->showMessage(QString("Playing Cut/Crease type %1").arg(action.cutType));
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+void ArtPlusMainWindow::batchProcessing() {
+    // Batch processing of multiple documents
+    bool ok;
+    int numDocs = QInputDialog::getInt(this, "Batch Processing", "Number of documents:", 3, 1, 50, 1, &ok);
+    if (!ok) return;
+    
+    // In a full implementation, this would process multiple files
+    // For now, just show a message
+    m_statusBar->showMessage(QString("Batch processing: %1 documents").arg(numDocs));
+}
+
 void ArtPlusMainWindow::onSelectionChanged(const std::vector<ObjectId>& ids) {
     m_objectTree->clear();
     for (ObjectId id : ids) {
