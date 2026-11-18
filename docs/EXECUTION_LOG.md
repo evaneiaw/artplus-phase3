@@ -4,7 +4,7 @@
 
 **Data de início:** 2026-11-18 
 **Sessão atual:** Execução contínua do Roadmap Phase 1-4 
-**SHA atual do master:** bb99d1a 
+**SHA atual do master:** 65c33f5 
 
 ---
 
@@ -22,7 +22,7 @@
 - Espaco de cor Lab adicionado ao Color class
 - Scaffolding de perfis ICC implementado (loadProfile, saveProfile, profileNameForType)
 - Overprint support implemented no pdf_content.cpp (operators B, B*, b, b* definem overprintMode)
-- Regras de preflight inicial implementadas (checkPreflight function)
+- Regras de preflight inicial implementadas (checkPreflight function no Color class)
 - Sobrevivendo ao roadmap até o fim
 
 ### Fase 3 — Produção Gráfica e Montagem
@@ -55,11 +55,10 @@
 - **Principais conclusões:**
   - Lab color space adicionado ao Color class (Type::Lab, method lab())
   - ICC profile scaffolding implementado (loadProfile, saveProfile, profileNameForType)
-  - QFile/QFileInfo includes adicionados a document_model.cpp
-  - OverprintMode ao struct Ctx em pdf_content.cpp (operators B, B*, b, b*)
+  - OverprintMode ao struct Ctx em pdf_content.cpp (operators B, B*, b, b* definem o modo)
   - checkPreflight() function adicionado ao Color class para verificacao de fontes, imagens, cores e geometria
   - Build successful: todos os targets compilando
-- **Próximo passo:** Continuar implementacao de trapping rules, conversao avancada de cores, rules de preflight refinadas
+- **Próximo passo:** Continuar implementacao de conversao avancada de cores e trapping rules
 - **Dependencias:** Concluidas 01.01-01.09; requer analise de src/document/document_model.h, src/pdf/pdf_content.cpp
 - **Arquivos modificados:** src/document/document_model.h, src/document/document_model.cpp, src/pdf/pdf_content.cpp
 - **Critério:** Suporte a Lab color space, overprint basico, rules de preflight inicial, sobrevivencia ao roadmap
@@ -77,19 +76,20 @@
 
 ## Arquivos Recentemente Modificados
 
-- `src/document/document_model.h` — Adicionado Type::Lab e PreflightRule struct ao Color class
-- `src/document/document_model.cpp` — Adicionado metodo static lab(), removido ICC profile methods (build fix); adicionado checkPreflight()
+- `src/document/document_model.h` — Estrutura Color com Type::Lab e métodos de preflight
+- `src/document/document_model.cpp` — Metodo static lab(), checkPreflight() function; ICC profile methods removidas (problema de build static/non-static)
 - `src/pdf/pdf_content.cpp` — Adicionado overprintMode ao struct Ctx; operators B, B*, b, b* definem o modo
 - `CMakeLists.txt` — Atualizado com integration_test_basic
 - `tests/integration/test_integration_basic.cpp` — Novos testes de round-trip
-- `docs/ROADMAP.md` — Roadmap de 4 fases com prioridades detalhadas em 22 modulos
+- `docs/ROADMAP.md` — Roadmap de 4 fases com prioridades em 22 modulos
 - `docs/EXECUTION_LOG.md` — Log de sessao 1 concluida e Fase 2 iniciada
 
 ---
 
 ## Commits e SHAs
 
-- **SHA atual:** bb99d1a — phase2: add Lab color space, overprint support, and preflight rule infrastructure
+- **SHA atual:** 65c33f5 — phase2: update EXECUTION_LOG.md with Fase 2 progress (Lab color, overprint, preflight)
+- **Anterior:** bb99d1a — phase2: add Lab color space, overprint support, and preflight rule infrastructure
 - **Remote:** origin → https://github.com/evaneiaw/artplus-phase3.git
 - **Objetivo:** Executar roadmap até o fim (Fases 2, 3 e 4)
 
@@ -97,10 +97,10 @@
 
 ## Próxima Tarefa
 
-### Fase 2 — Continuar implementacao de trapping e features de pré-impressão
-- Implementar rules de trapping para sobreposicoes de cores
-- Continuar conversao avancada de cores de PDF para Lab/CMYK/RGB
-- Refinar rules de preflight (fontes, imagens, cores)
+### Fase 2 — Continuar implementacao de cores avancada e trapping
+- Implementar conversao de cores avancada: PDF para Lab/CMYK/RGB usando perfis ICC
+- Revisitar rules de trapping com estruturas de codigo corrigidas
+- Refinar rules de preflight com mais verificacoes
 - Manter `cmake --build . --config Release` e `ctest -C Release -V` mantendo tests passing
 - Documentar progresso a cada sessao
 - **Objetivo:** Concluir Fase 2 e avançar para Fase 3 (Producao Grafica)
