@@ -115,6 +115,8 @@ struct Ctx {
     Color strokeColor;
     float fillAlpha = 1.0f;
     float strokeAlpha = 1.0f;
+    // Overprint mode: 0 = normal, 1 = overprint stroke, 2 = overprint fill, 3 = overprint both
+    int overprintMode = 0;
     SoftMaskRef softMask;      // active soft mask (or hasValue=false)
     std::vector<QTransform> stack;
     std::vector<SoftMaskRef> softMaskStack;
@@ -416,10 +418,10 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
         if (o == "s") { ctx.curPath.push_back({ParsedPath::Element::T::Close, {}, {}, {}}); flushPath(false, true, false, false); operands.clear(); continue; }
         if (o == "f" || o == "F") { flushPath(true, false, false, false); operands.clear(); continue; }
         if (o == "f*") { flushPath(true, false, true, false); operands.clear(); continue; }
-        if (o == "B") { flushPath(true, true, false, false); operands.clear(); continue; }
-        if (o == "B*") { flushPath(true, true, true, false); operands.clear(); continue; }
-        if (o == "b") { ctx.curPath.push_back({ParsedPath::Element::T::Close, {}, {}, {}}); flushPath(true, true, false, false); operands.clear(); continue; }
-        if (o == "b*") { ctx.curPath.push_back({ParsedPath::Element::T::Close, {}, {}, {}}); flushPath(true, true, true, false); operands.clear(); continue; }
+        if (o == "B") { ctx.overprintMode = 3; flushPath(true, true, false, false); operands.clear(); continue; }
+        if (o == "B*") { ctx.overprintMode = 3; flushPath(true, true, true, false); operands.clear(); continue; }
+        if (o == "b") { ctx.overprintMode = 0; ctx.curPath.push_back({ParsedPath::Element::T::Close, {}, {}, {}}); flushPath(true, true, false, false); operands.clear(); continue; }
+        if (o == "b*") { ctx.overprintMode = 3; ctx.curPath.push_back({ParsedPath::Element::T::Close, {}, {}, {}}); flushPath(true, true, true, false); operands.clear(); continue; }
         if (o == "n") { ctx.curPath.clear(); operands.clear(); continue; }
 
         // -------- clipping

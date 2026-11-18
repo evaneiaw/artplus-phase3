@@ -74,10 +74,22 @@ struct Color {
     // ICC profile associated with this color (optional, for color management)
     QString profileName;
 
-    // ICC profile methods
-    static bool loadProfile(const QString& path);
-    static QByteArray saveProfile(const QString& path);
-    static QString profileNameForType(Type type);
+    // Preflight rule types
+    enum class PreflightRuleType {
+        MissingFonts,
+        LowResolutionImages,
+        OutOfGamutColors,
+        UnauthorizedColors,
+        ObjectsOutsidePage,
+        TransparencyIssues
+    };
+
+    struct PreflightRule {
+        PreflightRuleType type;
+        QString description;
+        QString details;
+        bool passed; // true = issue found, false = OK
+    };
 
     Color() = default;
     static Color cmyk(float c, float m, float y, float k);
