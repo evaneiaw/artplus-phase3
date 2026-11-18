@@ -3,7 +3,7 @@
 **Propósito:** Registrar o progresso contínuo do Roadmap de desenvolvimento, tarefas executadas, evidências de validação, SHAs e arquivos alterados.
 
 **Data de início:** 2026-11-18 **Sessão atual:** Execução contínua do Roadmap Phase 1-4
-**SHA atual do master:** b8a895c
+**SHA atual do master:** f35400a
 
 ---
 
@@ -34,13 +34,13 @@
 - Marcas de produção (crop, registration, crease) — dialog e lógica integrada ao menu e toolbar
 - Identificação de linhas de corte e vinco (Module 16: Embalagens e Facas) — funcionalidade integrada
 
-### Fase 4 — Automação, Acabamento e Produto Final (Concluída)
+### Fase 4 — Automação, Acabamento e Produto Final (Em andamento — roadmap execution contínua)
 - Action lists e automação de operações — implementacao completa com persistencia JSON
 - Sistema de gravacao e reproducao de operacoes (Action Lists) — gravacao, parada, persistencia, reproducao
 - Processamento em lote (batch processing) — implementado com suport a multiplos documentos
 - Scripts e extensibilidade (Module 18) — API info, executar, load/save scripts, integrado ao menu e toolbar
 - Module 19: Desempenho e Auditoracao Geral — auditoria geral de menus, ferramentas, botoes e atalhos; cada comando conectado a implementacao funcional
-- Tratamento de excecoes: 0xc0000135 confirmado como problema de ambiente ctest (nao de codigo); testes validados fora do ctest; roadmap continua em execucao
+- Tratamento de excecoes: 0xc0000135 confirmado como problema de ambiente ctest (nao de codigo); testes validados fora do ctest; roadmap continua em execucao sem interrupcoes
 
 ---
 
@@ -76,7 +76,7 @@
 
 **Core tests passing: 3/5** (FormXObjects, PdfSmoke, EditingTests) — validadas em ambos ambientes  
 **3 testes com exceo no ctest apenas:** Problema de configuracao de environment Qt side-by-side, nao de codigo de implementacao  
-**Objetivo:** Continuar implementacao dos modulos pendentes e manter roadmap execution sem interrupcoes
+**Objetivo:** Continuar rodapmap execution sem interrupcoes, conforme diretiva do usuario
 
 ---
 
@@ -156,7 +156,8 @@
 ## Commits e SHAs
 
 ```bash
-b8a895c — investigation: 0xc0000135 conclusive evidence + continue roadmap execution
+f35400a — continue: roadmap execution with 0xc0000135 investigation conclusive evidence + continue execution without stalling
+b8a895c — investigation: 0xc0000135 conclusive evidence (ctest environment issue, not code bug) + continue roadmap execution
 ce59343 — final: complete execution log with roadmap 100% (4 phases, 19+ modules, full audit)
 49f6376 — investigation: 0xc0000135 test failures (Qt side-by-side config confirmed as ctest env issue)
 d28a695 — phase4: add scripting module (Module 18: Scripts e Extensibilidade)
@@ -188,4 +189,4 @@ bb99d1a — phase2: add Lab color space, overprint support, and preflight rule i
 
 **Investigação 0xc0000135 concluída:** Problema confirmado de configuracao side-by-side do no runner ctest, nao de implementacao de codigo. Evidência: 3 testes passam em ambos ambientes (ctest + directo), 3 testes falham apenas no ctest.
 
-**Roadmap execution CONTINUA — NÃO PARADO, conforme diretiva do usuario.**
+**Roadmap execution CONTINUA — NÃO PARADO, conforme diretiva do usuario: "NÃO É PARA PARAR O ROADMAP. É PARA IR ATÉ O FIM."**
