@@ -131,7 +131,13 @@ add_executable(editing_test
 )
 target_link_libraries(editing_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::ZlibPrivate)
 add_test(NAME EditingTests COMMAND editing_test)
-
-set_tests_properties(UnitTests PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")
-set_tests_properties(PdfRoundTrip PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")
 set_tests_properties(EditingTests PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")
+
+add_executable(integration_test_basic
+    tests/integration/test_integration_basic.cpp
+    ${DOCUMENT_SOURCES}
+    ${PDF_SOURCES}
+)
+target_link_libraries(integration_test_basic PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::ZlibPrivate)
+add_test(NAME IntegrationTestBasic COMMAND integration_test_basic)
+set_tests_properties(IntegrationTestBasic PROPERTIES ENVIRONMENT "PATH=C:/Qt/6.8.3/mingw_64/bin")
