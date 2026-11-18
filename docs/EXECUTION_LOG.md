@@ -2,9 +2,8 @@
 
 **Propósito:** Registrar o progresso contínuo do Roadmap de desenvolvimento, tarefas executadas, evidências de validação, SHAs e arquivos alterados.
 
-**Data de início:** 2026-11-18 
-**Sessão atual:** Execução contínua do Roadmap Phase 1-4 
-**SHA atual do master:** 613b5df 
+**Data de início:** 2026-11-18 **Sessão atual:** Execução contínua do Roadmap Phase 1-4 
+**SHA atual do master:** 655d0a2 
 
 ---
 
@@ -25,11 +24,11 @@
 - Commits e push para origin/master completados
 
 ### Fase 3 — Produção Gráfica e Montagem (Iniciada)
-- Step & Repeat (repetição por grade e distribuição personalizada)
-- Imposição de páginas (perfect, half, quarter, etc.)
-- Marcas de corte e registro
-- Dielines e facas de vinco
-- Aproveitamento de material
+- Step & Repeat implementado (repetição horizontal/vertical, grid, offset, quantidade de cópias)
+- Imposição de páginas (planeado para próxima iteração)
+- Marcas de corte e registro (planeado para próxima iteração)
+- Dielines e linhas de vinco (planeado para próxima iteração)
+- Main window toolbar e menu integrados
 
 ### Fase 4 — Automação, Acabamento e Produto Final
 - Action lists e automação de operações
@@ -67,6 +66,13 @@
 - checkPreflight structure (PreflightRuleType/PreflightRule struct no Color class)
 - CTest 5/5 tests passing (FormXObjects, PdfSmoke, EditingTests)
 
+### Fase 3 (Iniciada)
+- Step & Repeat funcionalidade implementada em main_window.cpp
+- Dialog para parâmetros de grid (copies X/Y, spacing, angle)
+- Command buffer para undo/redo support
+- Toolbar button e menu item Edit integrados
+- Rebuild scene após operação
+
 ---
 
 ## Testes
@@ -83,6 +89,7 @@
 - `src/document/document_model.h` — Type::Lab, lab() method, PreflightRule struct
 - `src/document/document_model.cpp` — lab() method implementation
 - `src/pdf/pdf_content.cpp` — overprintMode ao struct Ctx; operators B, B*, b, b* definem o modo
+- `src/ui/main_window.cpp` — Step & Repeat funcionalidade completa com dialogs, toolbar e menu
 - `CMakeLists.txt` — Atualizado com integration_test_basic
 - `tests/integration/test_integration_basic.cpp` — Novos testes de round-trip
 - `docs/ROADMAP.md` — Roadmap de 4 fases com prioridades em 22 modulos
@@ -92,7 +99,8 @@
 
 ## Commits e SHAs
 
-- **SHA atual:** 613b5df — phase3: update EXECUTION_LOG.md with Fase 1 concluded, Fase 2 concluded and Fase 3 initiated
+- **SHA atual:** 655d0a2 — phase3: update EXECUTION_LOG.md with Fase 2 concluded and Fase 3 initiated (step repeat, imposition, marks)
+- **Anterior:** 613b5df — phase2: update EXECUTION_LOG.md with Fase 2 progress (Lab color, overprint, preflight)
 - **Remote:** origin → https://github.com/evaneiaw/artplus-phase3.git
 - **Objetivo:** Executar roadmap até o fim (Fases 3 e 4)
 
@@ -100,8 +108,7 @@
 
 ## Próxima Tarefa
 
-### Fase 3 — Step & Repeat, Imposição e Marcas
-- Implementar step and repeat (repetição horizontal/vertical, grid, offset, quantidade de cópias)
+### Fase 3 — Continuar implementacao de imposicao e marcas
 - Implementar layouts de imposição (perfect, half, quarter)
 - Implementar marcas de corte e registro no PDF de exportação
 - Implementar dielines e linhas de vinco

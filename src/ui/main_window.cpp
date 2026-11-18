@@ -674,6 +674,9 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     QAction* deleteAct = editMenu->addAction("&Delete Selected");
     deleteAct->setShortcut(QKeySequence::Delete);
     connect(deleteAct, &QAction::triggered, this, &ArtPlusMainWindow::deleteSelected);
+    QAction* stepRepeatAct = editMenu->addAction("Step & Repeat...");
+    stepRepeatAct->setShortcut(QKeySequence("S"));
+    connect(stepRepeatAct, &QAction::triggered, this, &ArtPlusMainWindow::stepRepeat);
 
     // View menu
     QMenu* viewMenu = menuBar()->addMenu("&View");
@@ -719,6 +722,7 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     addTool("Select All", "Select all objects (Ctrl+A)", &ArtPlusMainWindow::selectAll);
     addTool("Deselect", "Deselect all", &ArtPlusMainWindow::deselectAll);
     addTool("Delete", "Delete selected objects (Del)", &ArtPlusMainWindow::deleteSelected);
+    addTool("Step & Repeat", "Step & Repeat selected objects in a grid (S)", &ArtPlusMainWindow::stepRepeat);
     toolbar->addSeparator();
 
     addTool("Zoom In", "Zoom in (Ctrl++)", &ArtPlusMainWindow::zoomIn);
@@ -858,6 +862,79 @@ void ArtPlusMainWindow::deselectAll() {
 void ArtPlusMainWindow::deleteSelected() {
     m_scene->deleteSelected();
     updateDocumentInfo();
+}
+
+void ArtPlusMainWindow::stepRepeat() {
+    // Step & Repeat: duplicate selected objects in a grid
+    const auto selectedIds = m_scene->selectedObjectIds();
+    if (selectedIds.empty()) {
+        m_statusBar->showMessage("No objects selected for step repeat");
+        return;
+    }
+
+    // Get transform parameters from user via simple input dialogs
+    bool ok;
+    int copiesX = QInputDialog::getInt(this, "Step & Repeat", "Copies in X direction:", 3, 1, 100, 1, &ok);
+    if (!ok) return;
+    int copiesY = QInputDialog::getInt(this, "Step & Repeat", "Copies in Y direction:", 3, 1, 100, 1, &ok);
+    if (!ok) return;
+    qreal spacingX = QInputDialog::getDouble(this, "Step & Repeat", "Horizontal spacing:", 50.0, 0, 10000, 0.1, &ok);
+    if (!ok) return;
+    qreal spacingY = QInputDialog::getDouble(this, "Step & Repeat", "Vertical spacing:", 50.0, 0, 10000, 0.1, &ok);
+    if (!ok) return;
+    qreal angle = QInputDialog::getDouble(this, "Step & Repeat", "Rotation angle (degrees):", 0.0, -360, 360, 1.0, &ok);
+    if (!ok) return;
+
+    if (!m_document.isValid()) return;
+
+    // Capture snapshot for undo
+    if (m_history.canUndo()) {
+        // Create a transform command for step & repeat
+        auto cmd = std::make_unique<TransformCommand>(selectedIds, selectedIds, selectedIds,
+            QString("Step & Repeat: %1x%2 grid").arg(copiesX).arg(copiesY));
+        m_history.push(std::move(cmd));
+    }
+
+    // Duplicate objects in grid
+    QTransform rotateTransform;
+    if (angle != 0.0) {
+        rotateTransform.rotate(angle);
+    }
+
+    for (int i = 0; i < copiesX; ++i) {
+        for (int j = 0; j < copiesY; ++j) {
+            // Calculate position: i * spacingX horizontally, j * spacingY vertically
+            QTransform translateTransform;
+            translateTransform.translate(i * spacingX, j * spacingY);
+
+            // Apply to each selected object
+            for (ObjectId id : selectedIds) {
+                auto obj = m_document.object(id);
+                if (!obj) continue;
+
+                QTransform originalTransform = obj->transform();
+                QTransform newTransform = originalTransform * translateTransform * rotateTransform;
+
+                auto copy = obj->clone();
+                copy->setTransform(newTransform);
+                copy->setLayerId(obj->layerId());
+                copy->setClipMaskIds(obj->clipMaskIds());
+                copy->setSoftMaskId(obj->softMaskId());
+                copy->setVisible(obj->visible());
+                // Generate a new ID for the copy
+                copy->setId(m_document.nextObjectId++);
+                m_document.addObject(copy);
+
+                // Add to selection
+                m_document.selectObject(copy->id(), true);
+            }
+        }
+    }
+
+    m_document.setModified(true);
+    rebuildScene();
+    emit selectionChangedObjects(m_document.selectedObjectIds());
+    m_statusBar->showMessage(QString("Step & Repeat completed: %1x%2 grid").arg(copiesX).arg(copiesY));
 }
 
 void ArtPlusMainWindow::onSelectionChanged(const std::vector<ObjectId>& ids) {
