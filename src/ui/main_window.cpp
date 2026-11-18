@@ -63,8 +63,45 @@ public:
     template <class... Args>
     explicit ClipAwareItem(Args&&... args) : Item(std::forward<Args>(args)...) {}
     void setClipPaths(const std::vector<QPainterPath>& paths) { m_clipPaths = paths; }
+    void setSoftMaskImage(const QImage& mask) { m_mask = mask; }
+
 protected:
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override {
+        if (!m_mask.isNull()) {
+            // Render the item into an offscreen image, multiply by the mask alpha,
+            // then composite it onto the scene painter.
+            QRectF r = Item::boundingRect();
+            if (!r.isValid() || r.isEmpty()) {
+                paintWithoutMask(painter, option, widget);
+                return;
+            }
+            QImage img(r.width(), r.height(), QImage::Format_ARGB32);
+            img.fill(Qt::transparent);
+            QPainter off(&img);
+            off.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
+            off.translate(-r.left(), -r.top());
+            paintWithoutMask(&off, option, widget);
+            off.end();
+
+            QImage mscaled = m_mask.scaled(img.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                                 .convertToFormat(QImage::Format_Grayscale8);
+            for (int y = 0; y < img.height(); ++y) {
+                const uchar* mptr = mscaled.constScanLine(y);
+                QRgb* dst = reinterpret_cast<QRgb*>(img.scanLine(y));
+                for (int x = 0; x < img.width(); ++x) {
+                    QRgb p = dst[x];
+                    int alpha = (qAlpha(p) * mptr[x]) / 255;
+                    dst[x] = qRgba(qRed(p), qGreen(p), qBlue(p), alpha);
+                }
+            }
+            painter->drawImage(r.topLeft(), img);
+            return;
+        }
+        paintWithoutMask(painter, option, widget);
+    }
+
+private:
+    void paintWithoutMask(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
         if (m_clipPaths.empty()) {
             Item::paint(painter, option, widget);
             return;
@@ -78,8 +115,9 @@ protected:
         Item::paint(painter, option, widget);
         painter->restore();
     }
-private:
+
     std::vector<QPainterPath> m_clipPaths;
+    QImage m_mask;
 };
 
 using ClipAwarePathItem = ClipAwareItem<QGraphicsPathItem>;
@@ -154,6 +192,15 @@ void ArtPlusScene::refresh() {
             local.push_back(inv.map(mask->transform().map(path)));
         }
         return local;
+    };
+
+    // Resolve soft mask image (alpha mask from the PDF /SMask ExtGState), if any
+    auto softMaskFor = [this](const std::shared_ptr<DocumentObject>& obj) -> QImage {
+        if (obj->softMaskId() == 0) return QImage();
+        auto mask = m_doc->object(obj->softMaskId());
+        if (!mask || mask->type() != ObjectType::OpacityMask) return QImage();
+        if (auto mo = std::dynamic_pointer_cast<OpacityMaskObject>(mask)) return mo->image();
+        return QImage();
     };
 
     for (const auto& [id, obj] : m_doc->objects()) {
@@ -249,6 +296,7 @@ void ArtPlusScene::refresh() {
             item->setPen(hasStroke ? penStroke : QPen(Qt::NoPen));
             item->setTransform(objTransform);
             item->setClipPaths(clipPathsFor(obj, objTransform));
+            item->setSoftMaskImage(softMaskFor(obj));
             item->setOpacity(hasFill ? obj->fillStroke().fillAlpha : obj->fillStroke().strokeAlpha);
             item->setData(Qt::UserRole, id); // ObjectId (uint32)
             if (obj->visible()) item->setVisible(true);
@@ -287,6 +335,7 @@ void ArtPlusScene::refresh() {
             effective.translate(org.x(), org.y());
             if (rotationDeg != 0.0) effective.rotate(rotationDeg);
             item->setClipPaths(clipPathsFor(obj, effective));
+            item->setSoftMaskImage(softMaskFor(obj));
             item->setOpacity(obj->fillStroke().fillAlpha);
             item->setData(Qt::UserRole, id);
             item->setVisible(obj->visible());
@@ -299,6 +348,7 @@ void ArtPlusScene::refresh() {
             QTransform objTransform = obj->transform();
             item->setTransform(objTransform);
             item->setClipPaths(clipPathsFor(obj, objTransform));
+            item->setSoftMaskImage(softMaskFor(obj));
             item->setOpacity(obj->fillStroke().fillAlpha);
             item->setData(Qt::UserRole, id);
             item->setVisible(obj->visible());

@@ -52,6 +52,13 @@ add_executable(form_parser_probe
 )
 target_link_libraries(form_parser_probe PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::ZlibPrivate)
 
+add_executable(smask_probe
+    tests/integration/smask_probe.cpp
+    ${DOCUMENT_SOURCES}
+    ${PDF_SOURCES}
+)
+target_link_libraries(smask_probe PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::ZlibPrivate)
+
 add_executable(mirror_probe
     tests/integration/mirror_probe.cpp
     ${DOCUMENT_SOURCES}

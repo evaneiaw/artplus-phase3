@@ -5,6 +5,7 @@
 #include <QBuffer>
 #include <sstream>
 #include <iomanip>
+#include <set>
 
 namespace ArtPlus {
 namespace PDF {
@@ -145,7 +146,7 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
     const int fontNum = contentBase + numPages;
     const int imageBase = fontNum + 1;
 
-    // Precompute boxes, draw orders, and image assignments (deterministic, per file order)
+    // Precompute boxes, draw orders, and image/mask assignments (deterministic, per file order)
     std::vector<QRectF> boxes;
     std::vector<std::vector<std::shared_ptr<DocumentObject>>> orders;
     std::vector<std::vector<int>> pageImageNums;   // per page: list of XObject object numbers
@@ -193,24 +194,56 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
     std::map<int, ImageEmbedding> imagesByNum;
     for (const auto& embeds : pageImageData) for (const auto& emb : embeds) imagesByNum[emb.objectNum] = emb;
 
-    // Assign ExtGState object numbers to objects that carry alpha < 1
-    const int alphaGsBase = nextImageNum;
+    // Assign soft mask XObject numbers (grayscale images referenced by ExtGState /SMask)
+    const int maskBase = nextImageNum;
+    std::map<ObjectId, int> maskXObjectNum;
+    std::map<int, std::shared_ptr<OpacityMaskObject>> maskByNum;
+    int nextMaskNum = maskBase;
+    for (const auto& order : orders) {
+        for (const auto& obj : order) {
+            ObjectId mid = obj->softMaskId();
+            if (mid != 0 && maskXObjectNum.find(mid) == maskXObjectNum.end()) {
+                auto mask = doc.object(mid);
+                if (mask && mask->type() == ObjectType::OpacityMask) {
+                    auto mo = std::dynamic_pointer_cast<OpacityMaskObject>(mask);
+                    if (mo) {
+                        maskXObjectNum[mid] = nextMaskNum;
+                        maskByNum[nextMaskNum] = mo;
+                        nextMaskNum++;
+                    }
+                }
+            }
+        }
+    }
+    // Used soft masks referenced per page (for /XObject resources)
+    std::vector<std::vector<int>> pageMaskNums(orders.size());
+
+    // Assign ExtGState object numbers to objects that carry alpha < 1 or a soft mask
+    const int alphaGsBase = nextMaskNum;
     std::map<ObjectId, int> alphaGsNum;
     int nextGs = alphaGsBase;
     for (const auto& order : orders) {
         for (const auto& obj : order) {
-            if (obj->fillStroke().fillAlpha < 0.999f || obj->fillStroke().strokeAlpha < 0.999f) {
-                if (alphaGsNum.find(obj->id()) == alphaGsNum.end()) alphaGsNum[obj->id()] = nextGs++;
-            }
+            bool needsGs = (obj->fillStroke().fillAlpha < 0.999f || obj->fillStroke().strokeAlpha < 0.999f)
+                           || obj->softMaskId() != 0;
+            if (needsGs && alphaGsNum.find(obj->id()) == alphaGsNum.end()) alphaGsNum[obj->id()] = nextGs++;
         }
     }
     const int alphaGsEnd = nextGs;
     std::vector<std::vector<int>> pageGsNums(orders.size());
     for (size_t pi = 0; pi < orders.size(); ++pi) {
+        std::set<int> gsOnPage;
+        std::set<int> masksOnPage;
         for (const auto& obj : orders[pi]) {
             auto it = alphaGsNum.find(obj->id());
-            if (it != alphaGsNum.end()) pageGsNums[pi].push_back(it->second);
+            if (it != alphaGsNum.end()) gsOnPage.insert(it->second);
+            if (obj->softMaskId() != 0) {
+                auto mi = maskXObjectNum.find(obj->softMaskId());
+                if (mi != maskXObjectNum.end()) masksOnPage.insert(mi->second);
+            }
         }
+        pageGsNums[pi].assign(gsOnPage.begin(), gsOnPage.end());
+        pageMaskNums[pi].assign(masksOnPage.begin(), masksOnPage.end());
     }
 
     // Build content streams with image Do operators
@@ -254,6 +287,7 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
         };
         for (const auto& obj : orders[pi]) {
             if (obj->type() == ObjectType::ClippingMask) continue; // emitted via clip ops
+            if (obj->type() == ObjectType::OpacityMask) continue; // emitted via ExtGState /SMask
             content << "q\n";
             emitClips(*obj);
             auto gsIt = alphaGsNum.find(obj->id());
@@ -336,9 +370,10 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
         std::ostringstream o;
         o << "<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 " << (int)boxes[i].width() << " " << (int)boxes[i].height()
           << " ] /Contents " << contentsNum << " 0 R /Resources << /Font << /F1 " << fontNum << " 0 R >>";
-        if (!pageImageNums[i].empty()) {
+        if (!pageImageNums[i].empty() || !pageMaskNums[i].empty()) {
             o << " /XObject <<";
             for (int xobj : pageImageNums[i]) o << " /Im" << xobj << " " << xobj << " 0 R";
+            for (int m : pageMaskNums[i]) o << " /Sm" << m << " " << m << " 0 R";
             o << " >>";
         }
         if (!pageGsNums[i].empty()) {
@@ -378,22 +413,48 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
         addStream(o.str(), std::move(compressed));
     }
 
-    // ExtGState objects for translucent objects (alphaGsBase .. alphaGsEnd-1)
+    // Soft mask XObjects (maskBase .. nextMaskNum-1) as grayscale images
+    std::map<int, QImage> maskImagesByNum;
+    for (const auto& [num, mo] : maskByNum) maskImagesByNum[num] = mo->image();
+    for (int x = maskBase; x < nextMaskNum; ++x) {
+        auto it = maskImagesByNum.find(x);
+        if (it == maskImagesByNum.end()) continue;
+        QImage g = it->second.convertToFormat(QImage::Format_Grayscale8);
+        const uchar* bits = g.constBits();
+        std::vector<uint8_t> raw(bits, bits + (size_t)g.sizeInBytes());
+        std::vector<uint8_t> compressed = flateCompress(raw);
+        if (compressed.empty()) return false;
+        std::ostringstream o;
+        o << "<< /Type /XObject /Subtype /Image /Width " << g.width() << " /Height " << g.height()
+          << " /BitsPerComponent 8 /ColorSpace /DeviceGray /Filter /FlateDecode /Length " << compressed.size()
+          << " >>\nstream\n";
+        addStream(o.str(), std::move(compressed));
+    }
+
+    // ExtGState objects for translucent/soft-masked objects
     for (int gs = alphaGsBase; gs < alphaGsEnd; ++gs) {
-        // Find the object with this gs number to read its alphas
-        float ca = 1.0f, CA = 1.0f;
+        // Find the object with this gs number
+        std::shared_ptr<DocumentObject> obj;
         for (const auto& pair : alphaGsNum) {
-            if (pair.second == gs) {
-                auto obj = doc.object(pair.first);
-                if (obj) {
-                    ca = obj->fillStroke().fillAlpha;
-                    CA = obj->fillStroke().strokeAlpha;
-                }
-                break;
+            if (pair.second == gs) { obj = doc.object(pair.first); break; }
+        }
+        float ca = obj ? obj->fillStroke().fillAlpha : 1.0f;
+        float CA = obj ? obj->fillStroke().strokeAlpha : 1.0f;
+        std::ostringstream o;
+        o << "<< /Type /ExtGState /ca " << ca << " /CA " << CA << " /BM /Normal";
+        if (obj && obj->softMaskId() != 0) {
+            auto maskObj = doc.object(obj->softMaskId());
+            std::string smode = "Alpha";
+            if (maskObj && maskObj->type() == ObjectType::OpacityMask) {
+                auto mo = std::dynamic_pointer_cast<OpacityMaskObject>(maskObj);
+                if (mo && mo->mode() == "Luminosity") smode = "Luminosity";
+            }
+            auto mi = maskXObjectNum.find(obj->softMaskId());
+            if (mi != maskXObjectNum.end()) {
+                o << " /SMask << /Type /Mask /S /" << smode << " /G " << mi->second << " 0 R >>";
             }
         }
-        std::ostringstream o;
-        o << "<< /Type /ExtGState /ca " << ca << " /CA " << CA << " /BM /Normal >>";
+        o << " >>";
         add(o.str());
     }
 

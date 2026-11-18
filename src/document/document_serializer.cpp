@@ -142,6 +142,7 @@ static QJsonObject objectToJson(const DocumentObject& obj) {
     o["fillStroke"] = fillStrokeToJson(obj.fillStroke());
     o["layerId"] = (int)obj.layerId();
     o["parentId"] = (int)obj.parentId();
+    o["softMaskId"] = (int)obj.softMaskId();
     QJsonArray clipMasks;
     for (ObjectId c : obj.clipMaskIds()) clipMasks.append((int)c);
     o["clipMasks"] = clipMasks;
@@ -176,6 +177,14 @@ static QJsonObject objectToJson(const DocumentObject& obj) {
         }
         o["elements"] = elems;
         o["evenOdd"] = mask.evenOdd();
+    } else if (obj.type() == ObjectType::OpacityMask) {
+        auto& mask = static_cast<const OpacityMaskObject&>(obj);
+        QByteArray ba;
+        QBuffer buf(&ba);
+        buf.open(QIODevice::WriteOnly);
+        mask.image().save(&buf, "PNG");
+        o["maskPng"] = QString::fromLatin1(ba.toBase64());
+        o["mode"] = mask.mode();
     } else if (obj.type() == ObjectType::Text) {
         auto& t = static_cast<const TextObject&>(obj);
         o["text"] = t.text();
@@ -226,6 +235,14 @@ static std::shared_ptr<DocumentObject> objectFromJson(const QJsonObject& o) {
         }
         mask->setEvenOdd(o.value("evenOdd").toBool());
         obj = mask;
+    } else if (type == ObjectType::OpacityMask) {
+        auto mo = std::make_shared<OpacityMaskObject>();
+        QByteArray ba = QByteArray::fromBase64(o.value("maskPng").toString().toLatin1());
+        QImage mi;
+        mi.loadFromData(ba, "PNG");
+        mo->setImage(mi);
+        mo->setMode(o.value("mode").toString("Alpha"));
+        obj = mo;
     } else if (type == ObjectType::Text) {
         auto t = std::make_shared<TextObject>();
         t->setText(o.value("text").toString());
@@ -378,6 +395,15 @@ bool DocumentSerializer::fromJson(const QJsonObject& json, Document& out) {
         for (ObjectId oldChild : oldIds) {
             auto it = objectMap.find((int)oldChild);
             if (it != objectMap.end()) obj->addChild(it->second);
+        }
+
+        // Remap the soft mask reference
+        int oldMask = o.value("softMaskId").toInt(0);
+        if (oldMask != 0) {
+            auto it = objectMap.find(oldMask);
+            obj->setSoftMaskId(it != objectMap.end() ? it->second : 0);
+        } else {
+            obj->setSoftMaskId(0);
         }
 
         // Remap clip mask references

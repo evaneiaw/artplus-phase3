@@ -1,6 +1,8 @@
 #include "pdf_importer.h"
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
+#include <memory>
 
 namespace ArtPlus {
 using namespace PDF;
@@ -109,10 +111,56 @@ void importParsedInto(const PDF::PdfDocument& doc,
     std::vector<ClipScope> scopes;
     scopes.push_back(ClipScope{}); // page root scope
 
+    // Cache of soft mask objects created from parsed softMask references (per page)
+    std::unordered_map<int, ObjectId> softMaskCache;
+
     auto activeClipMasks = [&]() -> std::vector<ObjectId> {
         std::vector<ObjectId> all;
         for (const auto& s : scopes) all.insert(all.end(), s.clipIds.begin(), s.clipIds.end());
         return all;
+    };
+
+    auto resolveSoftMask = [&](const PDF::SoftMaskRef& sm) -> ObjectId {
+        if (!sm.hasValue) return 0;
+        auto it = softMaskCache.find(sm.objectNumber);
+        if (it != softMaskCache.end()) return it->second;
+
+        const PdfObject* xo = doc.findObject(sm.objectNumber, sm.objectGeneration);
+        if (!xo || !xo->isStream) {
+            result.warnings.push_back(QString("SMask XObject %1 not found; transparency mask dropped").arg(sm.objectNumber));
+            softMaskCache[sm.objectNumber] = 0;
+            return 0;
+        }
+
+        int w = xo->value.getInt("Width", 0);
+        int h = xo->value.getInt("Height", 0);
+        int bpc = xo->value.getInt("BitsPerComponent", 8);
+        PdfValue cs = xo->value.dictGet("ColorSpace");
+        QString csName;
+        if (cs.isName()) csName = cs.nameValue();
+
+        QImage img;
+        if (csName == "DeviceGray" && bpc == 8 && w > 0 && h > 0 && (int64_t)w * h <= (int64_t)xo->stream.size()) {
+            img = QImage((const uchar*)xo->stream.data(), w, h, w, QImage::Format_Grayscale8).copy();
+        } else if (csName == "DeviceRGB" && bpc == 8 && w > 0 && h > 0 && (int64_t)w * h * 3 <= (int64_t)xo->stream.size()) {
+            img = QImage((const uchar*)xo->stream.data(), w, h, w * 3, QImage::Format_RGB888).copy();
+        } else {
+            result.warnings.push_back(QString("SMask %1: unsupported format (ColorSpace=%2, bpc=%3); transparency mask dropped")
+                .arg(sm.objectNumber).arg(csName).arg(bpc));
+            softMaskCache[sm.objectNumber] = 0;
+            return 0;
+        }
+
+        auto mi = std::make_shared<OpacityMaskObject>();
+        mi->setImage(img);
+        mi->setMode(sm.mode);
+        mi->setLayerId(targetLayer->id());
+        mi->setName(QString("OpacityMask %1").arg(sm.objectNumber));
+        out.addObject(mi);
+        targetLayer->addObject(mi->id());
+        ++result.objectsImported;
+        softMaskCache[sm.objectNumber] = mi->id();
+        return mi->id();
     };
 
     for (const auto& ev : parsed.sequence) {
@@ -143,6 +191,7 @@ void importParsedInto(const PDF::PdfDocument& doc,
                 // Points already in absolute coordinates; identity transform
                 obj->setTransform(QTransform());
                 obj->setClipMaskIds(activeClipMasks());
+                obj->setSoftMaskId(resolveSoftMask(p.softMask));
                 obj->setName(QString("%1Path %2").arg(namePrefix).arg(++result.pathsImported));
                 out.addObject(obj);
                 targetLayer->addObject(obj->id());
@@ -157,6 +206,7 @@ void importParsedInto(const PDF::PdfDocument& doc,
                 // Text transform already maps text space to absolute display coordinates
                 obj->setTransform(t.transform);
                 obj->setClipMaskIds(activeClipMasks());
+                obj->setSoftMaskId(resolveSoftMask(t.softMask));
                 obj->setName(QString("%1Text %2").arg(namePrefix).arg(++result.textsImported));
                 out.addObject(obj);
                 targetLayer->addObject(obj->id());
@@ -207,6 +257,7 @@ void importParsedInto(const PDF::PdfDocument& doc,
                     }
                     obj->setTransform(xobjPlaceholder.transform);
                     obj->setClipMaskIds(activeClipMasks());
+                    obj->setSoftMaskId(resolveSoftMask(xobjPlaceholder.softMask));
                     obj->fillStroke().fillAlpha = xobjPlaceholder.opacity;
                     obj->setName(QString("%1Image %2").arg(namePrefix).arg(++result.imagesImported));
                     out.addObject(obj);

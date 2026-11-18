@@ -10,6 +10,13 @@
 namespace ArtPlus {
 namespace PDF {
 
+struct SoftMaskRef {
+    int objectNumber = 0;     // the referenced XObject (mask image or form)
+    int objectGeneration = 0;
+    QString mode;             // "Alpha" or "Luminosity"
+    bool hasValue = false;
+};
+
 struct ParsedPath {
     struct Element {
         enum class T { Move, Line, Cubic, Close } t;
@@ -29,6 +36,7 @@ struct ParsedPath {
     float fillAlpha = 1.0f;
     float strokeAlpha = 1.0f;
     bool evenOddFill = false;
+    SoftMaskRef softMask;
 };
 
 struct ParsedText {
@@ -39,6 +47,7 @@ struct ParsedText {
     bool hasFill = true;
     QTransform transform;
     float fillAlpha = 1.0f;
+    SoftMaskRef softMask;
 };
 
 struct ParsedImage {
@@ -48,6 +57,7 @@ struct ParsedImage {
     double displayWidth = 1.0, displayHeight = 1.0;
     QTransform transform;
     float opacity = 1.0f;
+    SoftMaskRef softMask;
 };
 
 struct ClippedArea {

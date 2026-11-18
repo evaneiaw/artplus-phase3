@@ -149,6 +149,9 @@ public:
     ObjectId parentId() const { return m_parentId; }
     void setParentId(ObjectId id) { m_parentId = id; }
 
+    ObjectId softMaskId() const { return m_softMaskId; }
+    void setSoftMaskId(ObjectId id) { m_softMaskId = id; }
+
     const std::vector<ObjectId>& clipMaskIds() const { return m_clipMasks; }
     void setClipMaskIds(const std::vector<ObjectId>& ids) { m_clipMasks = ids; }
     void addClipMaskId(ObjectId id) { m_clipMasks.push_back(id); }
@@ -169,6 +172,7 @@ private:
     FillStroke m_fillStroke;
     LayerId m_layerId;
     ObjectId m_parentId;
+    ObjectId m_softMaskId = 0;
     std::vector<ObjectId> m_clipMasks;
     std::vector<ObjectId> m_children;
 };
@@ -279,6 +283,25 @@ public:
 private:
     std::vector<Element> m_elements;
     bool m_evenOdd = false;
+};
+
+// Soft mask (transparency mask) imported from PDF /SMask ExtGState.
+// Holds the mask image (usually grayscale) and the /S mode (Alpha or Luminosity).
+class OpacityMaskObject : public DocumentObject {
+public:
+    OpacityMaskObject() : DocumentObject(ObjectType::OpacityMask) {}
+
+    const QImage& image() const { return m_image; }
+    void setImage(const QImage& img) { m_image = img; }
+    QString mode() const { return m_mode; }
+    void setMode(const QString& m) { m_mode = m; }
+
+    QRectF boundingBox() const override;
+    std::shared_ptr<DocumentObject> clone() const override;
+
+private:
+    QImage m_image;
+    QString m_mode = "Alpha";
 };
 
 class Layer {

@@ -115,7 +115,9 @@ struct Ctx {
     Color strokeColor;
     float fillAlpha = 1.0f;
     float strokeAlpha = 1.0f;
+    SoftMaskRef softMask;      // active soft mask (or hasValue=false)
     std::vector<QTransform> stack;
+    std::vector<SoftMaskRef> softMaskStack;
 
     std::vector<ParsedPath::Element> curPath;
     std::vector<ClippedArea> clips;
@@ -265,6 +267,7 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
         p.fillAlpha = ctx.fillAlpha;
         p.strokeAlpha = ctx.strokeAlpha;
         p.evenOddFill = evenOdd;
+        p.softMask = ctx.softMask;
         out.paths.push_back(p);
         out.sequence.push_back({Event::T::Path, (int)out.paths.size() - 1});
         ctx.curPath.clear();
@@ -287,8 +290,12 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
         const std::string& o = op.raw;
 
         // -------- graphics state
-        if (o == "q") { ctx.stack.push_back(ctx.ctm); out.sequence.push_back({Event::T::Push, -1}); operands.clear(); continue; }
-        if (o == "Q") { if (!ctx.stack.empty()) { ctx.ctm = ctx.stack.back(); ctx.stack.pop_back(); } out.sequence.push_back({Event::T::Pop, -1}); operands.clear(); continue; }
+        if (o == "q") { ctx.stack.push_back(ctx.ctm); ctx.softMaskStack.push_back(ctx.softMask); out.sequence.push_back({Event::T::Push, -1}); operands.clear(); continue; }
+        if (o == "Q") {
+            if (!ctx.stack.empty()) { ctx.ctm = ctx.stack.back(); ctx.stack.pop_back(); }
+            if (!ctx.softMaskStack.empty()) { ctx.softMask = ctx.softMaskStack.back(); ctx.softMaskStack.pop_back(); }
+            out.sequence.push_back({Event::T::Pop, -1}); operands.clear(); continue;
+        }
         if (o == "cm" && operands.size() >= 6) {
             size_t b = operands.size() - 6;
             double a = operands[b].number(), bb = operands[b+1].number(),
@@ -502,6 +509,7 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
                 // textMatrix * ctm.
                 t.transform = ctx.textMatrix * ctx.ctm;
                 t.fillAlpha = ctx.fillAlpha;
+                t.softMask = ctx.softMask;
                 out.texts.push_back(t);
                 out.sequence.push_back({Event::T::Text, (int)out.texts.size() - 1});
             }
@@ -518,6 +526,7 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
                     img.transform = ctx.ctm;
                     img.displayWidth = std::abs(ctx.ctm.m11());
                     img.displayHeight = std::abs(ctx.ctm.m22());
+                    img.softMask = ctx.softMask;
                     out.images.push_back(img);
                     out.sequence.push_back({Event::T::Image, (int)out.images.size() - 1});
                 }
@@ -537,6 +546,25 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
                         if (gsObj.isDictionary()) {
                             if (gsObj.dictHas("ca")) ctx.fillAlpha = (float)gsObj.getNumber("ca", 1.0);
                             if (gsObj.dictHas("CA")) ctx.strokeAlpha = (float)gsObj.getNumber("CA", 1.0);
+
+                            // Soft mask: /SMask  << /Type /Mask /S /Alpha|Luminosity /G N 0 R >>
+                            //           or a plain reference to such a dict
+                            PdfValue sm = gsObj.dictGet("SMask");
+                            if (sm.isRef()) sm = doc.resolve(sm);
+                            if (sm.isDictionary()) {
+                                std::string s = sm.dictHas("S") && sm.dictGet("S").isName()
+                                                    ? sm.dictGet("S").nameValue().toStdString()
+                                                    : std::string("Alpha");
+                                PdfValue gref = sm.dictGet("G");
+                                ctx.softMask.objectNumber = gref.refObj();
+                                ctx.softMask.objectGeneration = gref.refGen();
+                                ctx.softMask.mode = QString::fromStdString(s);
+                                ctx.softMask.hasValue = gref.isRef();
+                            } else if (sm.isName() && sm.nameValue() == "None") {
+                                ctx.softMask = SoftMaskRef{};
+                            } else if (!sm.isNull()) {
+                                addUnsupported(out, QString("ExtGState %1: unrecognized /SMask form").arg(nm.c_str()));
+                            }
                         }
                     } else {
                         addUnsupported(out, QString("ExtGState %1 not found in resources").arg(QString::fromStdString(nm)));
