@@ -1,4 +1,5 @@
 #include <QtTest/QtTest>
+#include <QDir>
 #include <iostream>
 #include <filesystem>
 #include "../../src/pdf/pdf_document.h"
@@ -24,6 +25,10 @@ static QString testDir() {
 class TestIntegrationBasic : public QObject {
     Q_OBJECT
 private slots:
+    void initTestCase() {
+        QVERIFY(QDir().mkpath(testDir()));
+    }
+
     void testOpenImportSaveRoundTrip_text() {
         // Teste: open PDF with text → import → save .artplus → reopen .artplus → verify text preserved
         PDF::PdfDocument pdf;
