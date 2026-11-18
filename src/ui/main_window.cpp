@@ -315,6 +315,13 @@ void ArtPlusScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
             selectIds(ids, additive);
             m_dragging = true;
             m_dragStart = event->scenePos();
+            m_dragStartTransforms.clear();
+            if (m_doc) {
+                for (ObjectId id : selectedObjectIds()) {
+                    auto obj = m_doc->object(id);
+                    if (obj) m_dragStartTransforms[id] = obj->transform();
+                }
+            }
             return;
         }
         // Start rubber band (also starts empty marquee)
@@ -352,7 +359,32 @@ void ArtPlusScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 }
 
 void ArtPlusScene::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
-    if (m_dragging) { m_dragging = false; return; }
+    if (m_dragging) {
+        m_dragging = false;
+        if (m_doc && m_undoStack && !m_dragStartTransforms.empty()) {
+            std::vector<ObjectId> moved;
+            std::vector<QTransform> before, after;
+            moved.reserve(m_dragStartTransforms.size());
+            bool anyChanged = false;
+            for (const auto& [id, beforeT] : m_dragStartTransforms) {
+                auto obj = m_doc->object(id);
+                if (!obj) continue;
+                moved.push_back(id);
+                before.push_back(beforeT);
+                after.push_back(obj->transform());
+                if (obj->transform() != beforeT) anyChanged = true;
+            }
+            if (anyChanged) {
+                auto cmd = std::make_unique<TransformCommand>(moved, before, after,
+                    QString("Move %1 object(s)").arg(moved.size()));
+                m_undoStack->push(std::move(cmd));
+                m_doc->setModified(true);
+                emit documentModified();
+            }
+            m_dragStartTransforms.clear();
+        }
+        return;
+    }
     if (m_rubberBand) {
         m_rubberBand = false;
         std::vector<ObjectId> ids;
@@ -423,7 +455,15 @@ std::vector<ObjectId> ArtPlusScene::hitTest(const QPointF& scenePos) const {
 
 void ArtPlusScene::deleteSelected() {
     if (!m_doc) return;
-    for (ObjectId id : selectedObjectIds()) {
+    const auto ids = selectedObjectIds();
+    if (ids.empty()) return;
+
+    // Capture snapshot for undo BEFORE mutating
+    if (m_undoStack) {
+        auto cmd = DeleteObjectsCommand::capture(*m_doc, ids);
+        m_undoStack->push(std::move(cmd));
+    }
+    for (ObjectId id : ids) {
         m_doc->removeObject(id);
         // remove from layers too
         for (LayerId lid : m_doc->layerOrder()) {
@@ -516,6 +556,7 @@ ArtPlusMainWindow::ArtPlusMainWindow(QWidget* parent) : QMainWindow(parent) {
 
 void ArtPlusMainWindow::setupUi() {
     m_scene = new ArtPlusScene(this);
+    m_scene->setUndoStack(&m_history);
     connect(m_scene, &ArtPlusScene::selectionChangedObjects, this, &ArtPlusMainWindow::onSelectionChanged);
     connect(m_scene, &ArtPlusScene::documentModified, this, &ArtPlusMainWindow::updateModifiedIndicator);
     m_view = new ArtPlusView(m_scene, this);
@@ -567,6 +608,13 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
 
     // Edit menu
     QMenu* editMenu = menuBar()->addMenu("&Edit");
+    QAction* undoAct = editMenu->addAction("&Undo");
+    undoAct->setShortcut(QKeySequence::Undo);
+    connect(undoAct, &QAction::triggered, this, &ArtPlusMainWindow::undoAction);
+    QAction* redoAct = editMenu->addAction("&Redo");
+    redoAct->setShortcut(QKeySequence::Redo);
+    connect(redoAct, &QAction::triggered, this, &ArtPlusMainWindow::redoAction);
+    editMenu->addSeparator();
     QAction* selectAllAct = editMenu->addAction("Select &All");
     selectAllAct->setShortcut(QKeySequence::SelectAll);
     connect(selectAllAct, &QAction::triggered, this, &ArtPlusMainWindow::selectAll);
@@ -645,6 +693,7 @@ bool ArtPlusMainWindow::openPdfPath(const QString& path) {
     m_originalPdfPath = path;
     m_document.setFilePath(path);
     m_document.setModified(false);
+    m_history.clear();
     rebuildScene();
     updateDocumentInfo();
     return true;
@@ -668,6 +717,7 @@ void ArtPlusMainWindow::openArtPlus() {
     }
     m_document = doc;
     m_originalPdfPath.clear();
+    m_history.clear();
     rebuildScene();
     updateDocumentInfo();
     m_statusBar->showMessage("Opened " + QFileInfo(path).fileName());
@@ -689,6 +739,7 @@ void ArtPlusMainWindow::saveArtPlus() {
         return;
     }
     m_document.setModified(false);
+    m_history.clear();
     updateModifiedIndicator();
     m_statusBar->showMessage("Saved " + QFileInfo(path).fileName());
 }
@@ -712,6 +763,32 @@ void ArtPlusMainWindow::zoomFit() {
     QRectF rect = m_scene->itemsBoundingRect();
     m_view->fitInView(rect, Qt::KeepAspectRatio);
     m_statusBar->showMessage(QString("Zoom %1%").arg((int)(m_view->transform().m11() * 100)));
+}
+
+void ArtPlusMainWindow::undoAction() {
+    if (!m_history.canUndo()) {
+        m_statusBar->showMessage("Nothing to undo");
+        return;
+    }
+    QString what = m_history.undoDescription();
+    m_history.undo(m_document);
+    m_scene->refresh();
+    m_document.setModified(true);
+    updateModifiedIndicator();
+    m_statusBar->showMessage(QString("Undid: %1").arg(what));
+}
+
+void ArtPlusMainWindow::redoAction() {
+    if (!m_history.canRedo()) {
+        m_statusBar->showMessage("Nothing to redo");
+        return;
+    }
+    QString what = m_history.redoDescription();
+    m_history.redo(m_document);
+    m_scene->refresh();
+    m_document.setModified(true);
+    updateModifiedIndicator();
+    m_statusBar->showMessage(QString("Redid: %1").arg(what));
 }
 
 void ArtPlusMainWindow::selectTool() { m_view->setTool(0); }

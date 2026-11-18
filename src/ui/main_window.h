@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../document/document_model.h"
+#include "../document/undo.h"
 #include <QMainWindow>
 #include <QGraphicsScene>
 #include <QGraphicsView>
@@ -13,6 +14,7 @@
 #include <QComboBox>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 
 namespace ArtPlus {
 
@@ -23,6 +25,7 @@ public:
     explicit ArtPlusScene(QObject* parent = nullptr) : QGraphicsScene(parent) {}
     void setDocument(Document* doc);
     Document* document() const { return m_doc; }
+    void setUndoStack(UndoStack* stack) { m_undoStack = stack; }
     void refresh();
     bool hasItems() const { return !QGraphicsScene::items().isEmpty(); }
     void setCurrentPage(PageId id);
@@ -45,11 +48,13 @@ protected:
 private:
     Document* m_doc = nullptr;
     PageId m_currentPage = 0;
+    UndoStack* m_undoStack = nullptr;
     bool m_dragging = false;
     QPointF m_dragStart;
     bool m_rubberBand = false;
     QRectF m_rubberBandRect;
     bool m_additive = false;
+    std::unordered_map<ObjectId, QTransform> m_dragStartTransforms;
 
     std::vector<ObjectId> hitTest(const QPointF& scenePos) const;
     void selectIds(const std::vector<ObjectId>& ids, bool additive);
@@ -104,6 +109,8 @@ private slots:
     void selectAll();
     void deselectAll();
     void deleteSelected();
+    void undoAction();
+    void redoAction();
     void onSelectionChanged(const std::vector<ObjectId>& ids);
     void updateModifiedIndicator();
     void onPageChanged(int index);
@@ -118,6 +125,7 @@ private:
     QDockWidget* m_objectsDock = nullptr;
     QTreeWidget* m_objectTree = nullptr;
     QStatusBar* m_statusBar = nullptr;
+    UndoStack m_history;
     QComboBox* m_pageCombo = nullptr;
     std::vector<PageId> m_pageIds;
 

@@ -6,6 +6,7 @@
 #include "../../src/pdf/pdf_importer.h"
 #include "../../src/pdf/pdf_document.h"
 #include "../../src/pdf/pdf_exporter.h"
+#include "../../src/pdf/pdf_content.h"
 
 using namespace ArtPlus;
 
@@ -151,6 +152,56 @@ private slots:
         QVERIFY2(bytes.contains("/Subtype /Image"), "regenerated PDF has no Image XObject");
         QVERIFY2(bytes.contains("/Type /XObject"), "regenerated PDF has no XObject type");
         QVERIFY2(bytes.contains("FlateDecode"), "regenerated PDF does not use FlateDecode for the image");
+    }
+
+    void testFormTransformBounds() {
+        // Ground truth measured with PyMuPDF 1.27 (page origin top-left):
+        //   Instance 1: identity at (50, 650 PDF)   -> rect (50,131.89)-(150,191.89)
+        //   Instance 2: scale 1.5 at (50,450 PDF)   -> rect (50,301.89)-(200,391.89)
+        //   Instance 3: rotate 45 at (300,250 PDF)  -> 4-point rotated rect
+        //   Instance 4: mirror x at (500,600 PDF)   -> rect (400,181.89)-(500,241.89)
+        //   Instance 5: nested 2x (outer 1x @ 60,40)-> rect (70,671.89)-(270,791.89)
+        PDF::PdfDocument pdf;
+        QVERIFY(pdf.open(fixture("test_form_transform.pdf")));
+        Document doc;
+        auto res = PdfImporter::import(pdf, doc);
+        QVERIFY(res.ok);
+
+        // Expected bounds table (Qt y-down coords)
+        struct Expected { double x0, y0, x1, y1; };
+        const Expected expected[5] = {
+            {50.0,  131.89, 150.0, 191.89},
+            {50.0,  301.89, 200.0, 391.89},
+            {257.57, 478.75, 370.71, 591.89}, // rotated instance bbox
+            {400.0, 181.89, 500.0, 241.89},
+            {70.0,  671.89, 270.0, 791.89}
+        };
+
+        // Collect all path objects sorted by their min-x then min-y (stable order for our fixture)
+        std::vector<std::shared_ptr<PathObject>> paths;
+        for (const auto& [id, obj] : doc.objects()) {
+            if (obj->type() == ObjectType::Path) {
+                paths.push_back(std::dynamic_pointer_cast<PathObject>(obj));
+            }
+        }
+        QCOMPARE(paths.size(), (size_t)5);
+
+        for (const auto& expectedBounds : expected) {
+            bool matched = false;
+            for (const auto& p : paths) {
+                QRectF bb = p->boundingBox();
+                if (qAbs(bb.left() - expectedBounds.x0) < 2.0 &&
+                    qAbs(bb.top()  - expectedBounds.y0) < 2.0 &&
+                    qAbs(bb.right()- expectedBounds.x1) < 2.0 &&
+                    qAbs(bb.bottom()- expectedBounds.y1) < 2.0) {
+                    matched = true;
+                    break;
+                }
+            }
+            QVERIFY2(matched, qPrintable(QString("No path matching expected bounds (%1,%2)-(%3,%4)")
+                .arg(expectedBounds.x0).arg(expectedBounds.y0)
+                .arg(expectedBounds.x1).arg(expectedBounds.y1)));
+        }
     }
 
     void testExportAndReimport() {

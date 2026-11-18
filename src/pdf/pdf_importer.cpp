@@ -95,13 +95,13 @@ std::shared_ptr<ClippingMaskObject> pdfClipToObject(const PDF::ClippedArea& clip
 
 // Recursively imports an already-parsed result into the document, preserving
 // q/Q scopes, clipping masks, and order of drawing.
-// parentTransform: composed into each object's transform (identity at page level).
+// Objects are created at identity transform; all coordinates are absolute
+// (the parser has already mapped points into page display space).
 void importParsedInto(const PDF::PdfDocument& doc,
                       Document& out,
                       std::shared_ptr<Layer> targetLayer,
                       PDF::ParseResult& parsed,
                       const PdfValue& resources,
-                      const QTransform& parentTransform,
                       const QString& namePrefix,
                       PdfImportResult& result) {
     // q/Q stack of scopes; each scope holds zero or more clip mask ids
@@ -113,10 +113,6 @@ void importParsedInto(const PDF::PdfDocument& doc,
         std::vector<ObjectId> all;
         for (const auto& s : scopes) all.insert(all.end(), s.clipIds.begin(), s.clipIds.end());
         return all;
-    };
-
-    auto assignTransform = [&](const QTransform& local) -> QTransform {
-        return parentTransform * local;
     };
 
     for (const auto& ev : parsed.sequence) {
@@ -132,7 +128,7 @@ void importParsedInto(const PDF::PdfDocument& doc,
             case PDF::Event::T::Clip: {
                 auto mask = pdfClipToObject(parsed.clips[ev.index]);
                 mask->setLayerId(targetLayer->id());
-                mask->setTransform(parentTransform);
+                // Clip points are already absolute (page display space)
                 mask->setName(QString("%1Clip %2").arg(namePrefix).arg(mask->id()));
                 out.addObject(mask);
                 targetLayer->addObject(mask->id());
@@ -144,7 +140,8 @@ void importParsedInto(const PDF::PdfDocument& doc,
                 const auto& p = parsed.paths[ev.index];
                 auto obj = pdfPathToObject(p);
                 obj->setLayerId(targetLayer->id());
-                obj->setTransform(assignTransform(obj->transform()));
+                // Points already in absolute coordinates; identity transform
+                obj->setTransform(QTransform());
                 obj->setClipMaskIds(activeClipMasks());
                 obj->setName(QString("%1Path %2").arg(namePrefix).arg(++result.pathsImported));
                 out.addObject(obj);
@@ -157,7 +154,8 @@ void importParsedInto(const PDF::PdfDocument& doc,
                 const auto& t = parsed.texts[ev.index];
                 auto obj = pdfTextToObject(t);
                 obj->setLayerId(targetLayer->id());
-                obj->setTransform(assignTransform(obj->transform()));
+                // Text transform already maps text space to absolute display coordinates
+                obj->setTransform(t.transform);
                 obj->setClipMaskIds(activeClipMasks());
                 obj->setName(QString("%1Text %2").arg(namePrefix).arg(++result.textsImported));
                 out.addObject(obj);
@@ -168,8 +166,9 @@ void importParsedInto(const PDF::PdfDocument& doc,
 
             case PDF::Event::T::Image: {
                 const auto& xobjPlaceholder = parsed.images[ev.index];
-                // Resolve XObject dict from the given resources
+                // Resolve XObject dict from the given resources (may itself be a ref)
                 PdfValue xobjs = resources.dictGet("XObject");
+                if (xobjs.isRef()) xobjs = doc.resolve(xobjs);
                 std::string key = xobjPlaceholder.resourceName.toStdString();
                 if (!key.empty() && key[0] == '/') key = key.substr(1);
                 PdfValue ref = xobjs.dictGet(key);
@@ -206,7 +205,7 @@ void importParsedInto(const PDF::PdfDocument& doc,
                         result.warnings.push_back(QString("Image %1 could not be decoded (w=%2 h=%3); object omitted from model, original content preserved in source PDF").arg(xobjPlaceholder.resourceName).arg(w).arg(h));
                         break;
                     }
-                    obj->setTransform(assignTransform(xobjPlaceholder.transform));
+                    obj->setTransform(xobjPlaceholder.transform);
                     obj->setClipMaskIds(activeClipMasks());
                     obj->fillStroke().fillAlpha = xobjPlaceholder.opacity;
                     obj->setName(QString("%1Image %2").arg(namePrefix).arg(++result.imagesImported));
@@ -217,7 +216,7 @@ void importParsedInto(const PDF::PdfDocument& doc,
                     // Recurse into the form's content stream as a group
                     auto groupObj = std::make_shared<GroupObject>();
                     groupObj->setLayerId(targetLayer->id());
-                    groupObj->setTransform(assignTransform(xobjPlaceholder.transform));
+                    // Identity transform: children are created in absolute coordinates
                     groupObj->setName(QString("%1Form %2").arg(namePrefix, QString::fromStdString(key)));
                     groupObj->setClipMaskIds(activeClipMasks());
 
@@ -231,39 +230,29 @@ void importParsedInto(const PDF::PdfDocument& doc,
                         formMatrix = QTransform(a, b, c, d, e, f);
                     }
 
-                    // The form content uses its own user space; the y-flip height
-                    // is derived from the form BBox.
-                    double formHeight = 100.0;
-                    PdfValue bbox = xo->value.dictGet("BBox");
-                    if (bbox.isArray() && bbox.arraySize() >= 4) {
-                        formHeight = bbox.arrayAt(3).number() - bbox.arrayAt(1).number();
-                        if (formHeight <= 0.0) formHeight = 100.0;
-                    }
+                    // Resolve the form's own /Resources dict (may be a ref)
+                    PdfValue formRes = xo->value.dictGet("Resources");
+                    if (formRes.isRef()) formRes = doc.resolve(formRes);
 
-                    // Compose parent transform with the form's own matrix; children keep identity.
-                    QTransform formCompose = assignTransform(xobjPlaceholder.transform) * formMatrix;
+                    // Compose: form's /Matrix first, then the Do CTM
+                    // (Qt: a * b applies a, then b)
+                    QTransform formCompose = formMatrix * xobjPlaceholder.transform;
 
                     auto childLayer = std::make_shared<Layer>(QString("Form %1").arg(QString::fromStdString(key)));
                     out.addLayer(childLayer);
 
                     QByteArray formContents((const char*)xo->stream.data(), (int)xo->stream.size());
+                    // pageHeight = -1 => the parser does NOT apply its own y-flip;
+                    // the flip is already part of the Do CTM chain.
                     PDF::ParseResult formParsed = PDF::PdfContentParser::parse(
-                        formContents, doc, xo->value, QTransform(), formHeight);
+                        formContents, doc, formRes, formCompose, -1.0);
 
-                    size_t objectsBeforeGroup = result.objectsImported;
                     importParsedInto(doc, out, childLayer, formParsed,
-                                     xo->value, formCompose,
+                                     formRes,
                                      namePrefix + QString::fromStdString(key) + "/",
                                      result);
 
-                    // Attach the produced children to the group
-                    for (size_t i = objectsBeforeGroup; i < result.objectsImported; ++i) {
-                        // Groups are added to layers by importParsedInto; gather ObjectIds
-                        // from the child layer's object list (last objects added).
-                        // Child layer holds ids in order; attach the tail.
-                    }
-                    Q_UNUSED(objectsBeforeGroup);
-                    // The child layer owns the new children; group simply records hierarchy by id references
+                    // The child layer holds the children in order
                     for (ObjectId oid : childLayer->objects()) groupObj->addChild(oid);
 
                     for (const auto& ftxt : formParsed.unsupported) {
@@ -325,7 +314,7 @@ PdfImportResult PdfImporter::import(const PDF::PdfDocument& doc, Document& out) 
             result.warnings.push_back(unsup);
         }
 
-        importParsedInto(doc, out, layer, parsed, pageResources, QTransform(),
+        importParsedInto(doc, out, layer, parsed, pageResources,
                          QString(), result);
 
         // Warn on annotations (not parsed, but we must not fail silently)

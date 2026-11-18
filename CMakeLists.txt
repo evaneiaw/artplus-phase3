@@ -20,6 +20,8 @@ set(DOCUMENT_SOURCES
     src/document/document_model.h
     src/document/document_serializer.cpp
     src/document/document_serializer.h
+    src/document/undo.cpp
+    src/document/undo.h
 )
 
 set(PDF_SOURCES
@@ -42,6 +44,34 @@ set(UI_SOURCES
     src/ui/main_window.cpp
     src/ui/main_window.h
 )
+
+add_executable(form_parser_probe
+    tests/integration/form_parser_probe.cpp
+    ${DOCUMENT_SOURCES}
+    ${PDF_SOURCES}
+)
+target_link_libraries(form_parser_probe PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::ZlibPrivate)
+
+add_executable(mirror_probe
+    tests/integration/mirror_probe.cpp
+    ${DOCUMENT_SOURCES}
+    ${PDF_SOURCES}
+)
+target_link_libraries(mirror_probe PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::ZlibPrivate)
+
+add_executable(page_placeholders
+    tests/integration/page_placeholders.cpp
+    ${DOCUMENT_SOURCES}
+    ${PDF_SOURCES}
+)
+target_link_libraries(page_placeholders PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::ZlibPrivate)
+
+add_executable(form_transform_probe
+    tests/integration/form_transform_probe.cpp
+    ${DOCUMENT_SOURCES}
+    ${PDF_SOURCES}
+)
+target_link_libraries(form_transform_probe PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::ZlibPrivate)
 
 add_executable(pdf_smoke
     tests/integration/pdf_smoke.cpp

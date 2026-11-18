@@ -60,8 +60,9 @@ PdfToken PdfLexer::lexNumber() {
         throw PdfError("Invalid number at offset " + std::to_string(start));
     }
     std::string text(m_data.constData() + start, m_pos - start);
+    // text already includes the leading sign (+/-)
     double value = std::stod(text);
-    if (negative) value = -value;
+    (void)negative;
     PdfToken tok;
     tok.type = PdfTokenType::Number;
     tok.number = value;

@@ -206,7 +206,13 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
                                     double pageHeight) {
     ParseResult out;
     Ctx ctx;
-    ctx.ctm = QTransform(1, 0, 0, -1, 0, pageHeight) * initialCtm;
+    // pageHeight < 0: the caller composed a fully-mapped CTM (e.g. Form XObjects);
+    // skip the automatic y-flip
+    if (pageHeight >= 0.0) {
+        ctx.ctm = QTransform(1, 0, 0, -1, 0, pageHeight) * initialCtm;
+    } else {
+        ctx.ctm = initialCtm;
+    }
     ctx.fillColor = Color::rgb(0, 0, 0);
     ctx.strokeColor = Color::rgb(0, 0, 0);
     ctx.textFill = Color::rgb(0, 0, 0);

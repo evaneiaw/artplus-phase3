@@ -173,6 +173,11 @@ std::shared_ptr<DocumentObject> ClippingMaskObject::clone() const {
     return copy;
 }
 
+void Layer::insertObjectAt(size_t index, ObjectId id) {
+    if (index > m_objects.size()) index = m_objects.size();
+    m_objects.insert(m_objects.begin() + (std::ptrdiff_t)index, id);
+}
+
 void Layer::removeObject(ObjectId id) {
     m_objects.erase(std::remove(m_objects.begin(), m_objects.end(), id), m_objects.end());
 }

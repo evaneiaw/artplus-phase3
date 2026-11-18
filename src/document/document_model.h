@@ -304,6 +304,7 @@ public:
 
     const std::vector<ObjectId>& objects() const { return m_objects; }
     void addObject(ObjectId id) { m_objects.push_back(id); }
+    void insertObjectAt(size_t index, ObjectId id);
     void removeObject(ObjectId id);
 
 private:
