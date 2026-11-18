@@ -12,6 +12,12 @@
 #include <QTreeWidget>
 #include <QMenuBar>
 #include <QComboBox>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QInputDialog>
+#include <QFileDialog>
+#include <QLineEdit>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -87,6 +93,49 @@ private:
 };
 
 // ------------------------------------------------------------ main window
+
+// Action structures for Module 17/18
+struct Action {
+    enum class Type {
+        StepRepeat,
+        Imposition,
+        Marks,
+        CutCreaseLines,
+        Unknown
+    } type;
+
+    // Step & Repeat parameters
+    int copiesX = 1;
+    int copiesY = 1;
+    qreal spacingX = 0.0;
+    qreal spacingY = 0.0;
+    qreal angle = 0.0;
+
+    // Imposition parameters
+    int impositionType = 0; // 0=None, 1=Half, 2=Quarter
+
+    // Marks parameters
+    int marksType = 0; // 0=None, 1=Crop, 2=Registration, 3=Crease
+
+    // Cut/Crease Lines parameters
+    int cutType = 0; // 0=None, 1=Cut, 2=Crease, 3=Art/Knife Separation
+
+    // Data for serialization
+    QString description;
+
+    QJsonDocument toJson() const;
+    static Action fromJson(const QJsonDocument& doc);
+};
+
+struct ActionList {
+    QString name;
+    QDateTime timestamp;
+    QVector<Action> actions;
+
+    QJsonDocument toJson() const;
+    static ActionList fromJson(const QJsonDocument& doc);
+};
+
 class ArtPlusMainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -96,21 +145,52 @@ public:
     void viewPage(int index); // 0-based; triggers onPageChanged via the combo
 
 private slots:
+    // File operations
     void openPdf();
     void openArtPlus();
     void saveArtPlus();
     void exportPdf();
+
+    // View operations
     void zoomIn();
     void zoomOut();
     void zoomFit();
+
+    // Tool selection
     void selectTool();
     void handTool();
     void zoomTool();
+
+    // Selection operations
     void selectAll();
     void deselectAll();
     void deleteSelected();
+
+    // Undo/Redo
     void undoAction();
     void redoAction();
+
+    // Production operations (Module 14-16)
+    void stepRepeat();
+    void imposition();
+    void marks();
+    void cutLines();
+
+    // Action Lists (Module 17)
+    void actionLists();
+    void executeAction(const Action& action);
+    void batchProcessing();
+
+    // Scripts & Extensibility (Module 18)
+    void presets();
+    void scripting();
+
+    // Reports, Performance, Recovery (Module 19/20)
+    void reports();
+    void performance();
+    void recovery();
+
+    // Document state
     void onSelectionChanged(const std::vector<ObjectId>& ids);
     void updateModifiedIndicator();
     void onPageChanged(int index);
@@ -128,6 +208,9 @@ private:
     UndoStack m_history;
     QComboBox* m_pageCombo = nullptr;
     std::vector<PageId> m_pageIds;
+
+    // Action Lists recording state
+    QVector<Action> m_recordedActions;
 
     void setupUi();
     void setupMenusAndToolbars();

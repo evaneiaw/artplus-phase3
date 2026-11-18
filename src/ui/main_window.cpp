@@ -897,15 +897,10 @@ void ArtPlusMainWindow::stepRepeat() {
     qreal angle = QInputDialog::getDouble(this, "Step & Repeat", "Rotation angle (degrees):", 0.0, -360, 360, 1.0, &ok);
     if (!ok) return;
 
-    if (!m_document.isValid()) return;
+    if (m_document.pageOrder().empty()) return;
 
-    // Capture snapshot for undo
-    if (m_history.canUndo()) {
-        // Create a transform command for step & repeat
-        auto cmd = std::make_unique<TransformCommand>(selectedIds, selectedIds, selectedIds,
-            QString("Step & Repeat: %1x%2 grid").arg(copiesX).arg(copiesY));
-        m_history.push(std::move(cmd));
-    }
+    // Step & Repeat creates new objects - not a simple transform
+    // Skip undo for now (would need a custom CreateObjectsCommand)
 
     // Duplicate objects in grid
     QTransform rotateTransform;
@@ -934,7 +929,7 @@ void ArtPlusMainWindow::stepRepeat() {
                 copy->setSoftMaskId(obj->softMaskId());
                 copy->setVisible(obj->visible());
                 // Generate a new ID for the copy
-                copy->setId(m_document.nextObjectId++);
+                copy->setId(DocumentObject::nextObjectId++);
                 m_document.addObject(copy);
 
                 // Add to selection
@@ -945,18 +940,21 @@ void ArtPlusMainWindow::stepRepeat() {
 
     m_document.setModified(true);
     rebuildScene();
-    emit selectionChangedObjects(m_document.selectedObjectIds());
     m_statusBar->showMessage(QString("Step & Repeat completed: %1x%2 grid").arg(copiesX).arg(copiesY));
 }
 
 void ArtPlusMainWindow::imposition() {
     // Imposition: arrange pages for printing and folding
-    if (!m_document.isValid()) return;
+    if (m_document.pageOrder().empty()) return;
 
     bool ok;
-    int type = QInputDialog::getItem(this, "Imposition", "Imposition type:",
-        {"None", "Half (2-up)", "Quarter (4-up)"}, 0, &ok);
+    QString typeStr = QInputDialog::getItem(this, "Imposition", "Imposition type:",
+        {"None", "Half (2-up)", "Quarter (4-up)"}, 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Half (2-up)") type = 1;
+    else if (typeStr == "Quarter (4-up)") type = 2;
 
     if (type == 0) { // None
         m_statusBar->showMessage("Imposition cancelled");
@@ -995,12 +993,17 @@ void ArtPlusMainWindow::imposition() {
 
 void ArtPlusMainWindow::marks() {
     // Production marks: crop marks, registration marks, fold/crease lines
-    if (!m_document.isValid()) return;
+    if (m_document.pageOrder().empty()) return;
 
     bool ok;
-    int type = QInputDialog::getItem(this, "Production Marks", "Marks type:",
-        {"None", "Crop Marks", "Registration Marks", "Crease Lines"}, 0, &ok);
+    QString typeStr = QInputDialog::getItem(this, "Production Marks", "Marks type:",
+        {"None", "Crop Marks", "Registration Marks", "Crease Lines"}, 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Crop Marks") type = 1;
+    else if (typeStr == "Registration Marks") type = 2;
+    else if (typeStr == "Crease Lines") type = 3;
 
     if (type == 0) { // None
         m_statusBar->showMessage("No marks selected");
@@ -1050,12 +1053,17 @@ void ArtPlusMainWindow::marks() {
 
 void ArtPlusMainWindow::cutLines() {
     // Cut lines and crease lines identification (Module 16: Embalagens e Facas)
-    if (!m_document.isValid()) return;
+    if (m_document.pageOrder().empty()) return;
 
     bool ok;
-    int type = QInputDialog::getItem(this, "Cut & Crease Lines", "Line type:",
-        {"None", "Cut Line", "Crease Line", "Art/Knife Separation"}, 0, &ok);
+    QString typeStr = QInputDialog::getItem(this, "Cut & Crease Lines", "Line type:",
+        {"None", "Cut Line", "Crease Line", "Art/Knife Separation"}, 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Cut Line") type = 1;
+    else if (typeStr == "Crease Line") type = 2;
+    else if (typeStr == "Art/Knife Separation") type = 3;
 
     if (type == 0) { // None
         m_statusBar->showMessage("No line type selected");
@@ -1098,118 +1106,26 @@ void ArtPlusMainWindow::cutLines() {
     // stroke width, layer, and PDF metadata
 }
 
-void ArtPlusMainWindow::updateDocumentInfo() {
-    if (m_document.pageOrder().empty()) {
-        m_statusBar->showMessage("Ready");
-        return;
-    }
-}
 
-struct Action {
-    enum class Type {
-        StepRepeat,
-        Imposition,
-        Marks,
-        CutCreaseLines,
-        Unknown
-    } type;
-    
-    // Step & Repeat parameters
-    int copiesX = 1;
-    int copiesY = 1;
-    qreal spacingX = 0.0;
-    qreal spacingY = 0.0;
-    qreal angle = 0.0;
-    
-    // Imposition parameters
-    int impositionType = 0; // 0=None, 1=Half, 2=Quarter
-    
-    // Marks parameters
-    int marksType = 0; // 0=None, 1=Crop, 2=Registration, 3=Crease
-    
-    // Cut/Crease Lines parameters
-    int cutType = 0; // 0=None, 1=Cut, 2=Crease, 3=Art/Knife Separation
-    
-    // Data for serialization
-    QString description;
-    
-    QJsonDocument toJson() const {
-        QJsonObject obj;
-        obj["type"] = static_cast<int>(type);
-        obj["copiesX"] = copiesX;
-        obj["copiesY"] = copiesY;
-        obj["spacingX"] = spacingX;
-        obj["spacingY"] = spacingY;
-        obj["angle"] = angle;
-        obj["impositionType"] = impositionType;
-        obj["marksType"] = marksType;
-        obj["cutType"] = cutType;
-        obj["description"] = description;
-        return QJsonDocument(obj);
-    }
-    
-    static Action fromJson(const QJsonDocument& doc) {
-        Action action;
-        if (doc.isNull()) return action;
-        QJsonObject obj = doc.object();
-        action.type = static_cast<Action::Type>(obj.value("type").toInt());
-        action.copiesX = obj.value("copiesX").toInt();
-        action.copiesY = obj.value("copiesY").toInt();
-        action.spacingX = obj.value("spacingX").toDouble();
-        action.spacingY = obj.value("spacingY").toDouble();
-        action.angle = obj.value("angle").toDouble();
-        action.impositionType = obj.value("impositionType").toInt();
-        action.marksType = obj.value("marksType").toInt();
-        action.cutType = obj.value("cutType").toInt();
-        action.description = obj.value("description").toString();
-        return action;
-    }
-};
-
-struct ActionList {
-    QString name;
-    QDateTime timestamp;
-    QVector<Action> actions;
-    
-    QJsonDocument toJson() const {
-        QJsonObject obj;
-        obj["name"] = name;
-        obj["timestamp"] = timestamp.toString(Qt::ISODate);
-        QJsonArray actionsArray;
-        for (const auto& action : actions) {
-            actionsArray.append(action.toJson().object());
-        }
-        obj["actions"] = actionsArray;
-        return QJsonDocument(obj);
-    }
-    
-    static ActionList fromJson(const QJsonDocument& doc) {
-        ActionList list;
-        if (doc.isNull()) return list;
-        QJsonObject obj = doc.object();
-        list.name = obj.value("name").toString();
-        list.timestamp = QDateTime::fromString(obj.value("timestamp").toString(), Qt::ISODate);
-        if (obj.contains("actions") && obj["actions"].isArray()) {
-            QJsonArray actionsArray = obj["actions"].toArray();
-            for (const auto& actionObj : actionsArray) {
-                list.actions.append(Action::fromJson(QJsonDocument(actionObj)));
-            }
-        }
-        return list;
-    }
-};
 
 void ArtPlusMainWindow::actionLists() {
     // Action Lists: record, save, load, and replay sequences of operations
     bool ok;
     
     // Check if there's a current recording session
-    bool isRecording = m_history.isValid(); // simple check
+    bool isRecording = !m_recordedActions.isEmpty();
     
-    int type = QInputDialog::getItem(this, "Action Lists", "Action type:",
+    QString typeStr = QInputDialog::getItem(this, "Action Lists", "Action type:",
         {"Start Recording", "Stop Recording", "Load Action List...", "Save Action List", "Play Action List", "Batch Processing..."},
-        isRecording ? 1 : 0, &ok);
+        isRecording ? 1 : 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Stop Recording") type = 1;
+    else if (typeStr == "Load Action List...") type = 2;
+    else if (typeStr == "Save Action List") type = 3;
+    else if (typeStr == "Play Action List") type = 4;
+    else if (typeStr == "Batch Processing...") type = 5;
 
     if (type == 0) { // Start Recording
         // Start recording - clear any previous recording state
@@ -1249,7 +1165,7 @@ void ArtPlusMainWindow::actionLists() {
             if (file.open(QFile::ReadOnly)) {
                 QByteArray data = file.readAll();
                 file.close();
-                ActionList list = ActionList::fromJson(QJsonDocument(data));
+                ActionList list = ActionList::fromJson(QJsonDocument::fromJson(data));
                 if (!list.name.isEmpty()) {
                     // Play back the action list
                     for (const auto& action : list.actions) {
@@ -1292,7 +1208,7 @@ void ArtPlusMainWindow::actionLists() {
             if (file.open(QFile::ReadOnly)) {
                 QByteArray data = file.readAll();
                 file.close();
-                ActionList list = ActionList::fromJson(QJsonDocument(data));
+                ActionList list = ActionList::fromJson(QJsonDocument::fromJson(data));
                 if (!list.name.isEmpty()) {
                     for (const auto& action : list.actions) {
                         executeAction(action);
@@ -1358,15 +1274,19 @@ void ArtPlusMainWindow::batchProcessing() {
     m_statusBar->showMessage(QString("Batch processing completed: %1 documents processed").arg(numDocs));
 }
 
-m_statusBar->showMessage(QString("Batch processing completed: %1 documents processed").arg(numDocs));
-}
-
 void ArtPlusMainWindow::presets() {
     // Presets and operation templates (Module 18: Scripts e Extensibilidade)
     bool ok;
-    int type = QInputDialog::getItem(this, "Presets", "Preset type:",
-        {"Step & Repeat Template", "Imposition Template", "Marks Template", "Cut/Crease Template", "Save Preset", "Load Preset"}, 0, &ok);
+    QString typeStr = QInputDialog::getItem(this, "Presets", "Preset type:",
+        {"Step & Repeat Template", "Imposition Template", "Marks Template", "Cut/Crease Template", "Save Preset", "Load Preset"}, 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Imposition Template") type = 1;
+    else if (typeStr == "Marks Template") type = 2;
+    else if (typeStr == "Cut/Crease Template") type = 3;
+    else if (typeStr == "Save Preset") type = 4;
+    else if (typeStr == "Load Preset") type = 5;
 
     if (type == 0) { // Step & Repeat Template
         m_statusBar->showMessage("Step & Repeat Preset: 3x3 grid, 50px spacing, 0-degree rotation");
@@ -1392,34 +1312,25 @@ void ArtPlusMainWindow::presets() {
     }
 }
 
-void ArtPlusMainWindow:: scripting() {
+void ArtPlusMainWindow::scripting() {
     // Scripting and extensibility (Module 18: Scripts e Extensibilidade)
     bool ok;
-    int type = QInputDialog::getItem(this, "Scripting", "Script type:",
-        {"Show API Info", "Execute Script", "Load Script File", "Save Script"}, 0, &ok);
+    QString typeStr = QInputDialog::getItem(this, "Scripting", "Script type:",
+        {"Show API Info", "Execute Script", "Load Script File", "Save Script"}, 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Execute Script") type = 1;
+    else if (typeStr == "Load Script File") type = 2;
+    else if (typeStr == "Save Script") type = 3;
 
     if (type == 0) { // Show API Info
         m_statusBar->showMessage("ArtPlus API: Color, Document, Page, Layer, Object types");
         m_statusBar->showMessage("Available operations: stepRepeat, imposition, marks, cutLines, undo, redo");
     }
     else if (type == 1) { // Execute Script
-        QString script = QInputDialog::getMultiLine(this, "Scripting", "Enter script code:\n\n"
-            "// Example: stepRepeat with 3x3 grid\n"
-            "// stepRepeat();\n"
-            "// or with parameters:\n"
-            "// stepRepeat(3, 3, 50.0, 50.0, 0.0);\n"
-            "\n"
-            "// Example: imposition half-up\n"
-            "// imposition(); // selects Half (2-up)\n"
-            "\n"
-            "// Example: crop marks\n"
-            "// marks(); // selects Crop Marks\n"
-            "\n"
-            "// The script editor would support full Qt/JavaScript-like syntax\n"
-            "with access to m_document, m_scene, m_history, and all API classes.",
-            "");
-        if (!script.isEmpty()) {
+        QString script = QInputDialog::getText(this, "Scripting", "Enter script code (single line):", QLineEdit::Normal, "", &ok);
+        if (ok && !script.isEmpty()) {
             m_statusBar->showMessage("Script entered (execution not implemented in this version)");
         }
     }
@@ -1446,12 +1357,17 @@ void ArtPlusMainWindow:: scripting() {
     }
 }
 
-void ArtPlusMainWindow:: reports() {
+void ArtPlusMainWindow::reports() {
     // Technical reports and documentation (Module 18/19: Reports)
     bool ok;
-    int type = QInputDialog::getItem(this, "Reports", "Report type:",
-        {"Operation Report", "Document Summary", "Action Log", "Export Report"}, 0, &ok);
+    QString typeStr = QInputDialog::getItem(this, "Reports", "Report type:",
+        {"Operation Report", "Document Summary", "Action Log", "Export Report"}, 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Document Summary") type = 1;
+    else if (typeStr == "Action Log") type = 2;
+    else if (typeStr == "Export Report") type = 3;
 
     if (type == 0) { // Operation Report
         // Generate report of recent operations
@@ -1474,12 +1390,17 @@ void ArtPlusMainWindow:: reports() {
     }
 }
 
-void ArtPlusMainWindow:: performance() {
+void ArtPlusMainWindow::performance() {
     // Performance optimization and monitoring (Module 19: Desempenho e Auditoracao Geral)
     bool ok;
-    int type = QInputDialog::getItem(this, "Performance", "Optimization type:",
-        {"Update UI Performance", "Validate Document Consistency", "Check Memory Usage", "Optimize Rendering"}, 0, &ok);
+    QString typeStr = QInputDialog::getItem(this, "Performance", "Optimization type:",
+        {"Update UI Performance", "Validate Document Consistency", "Check Memory Usage", "Optimize Rendering"}, 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Validate Document Consistency") type = 1;
+    else if (typeStr == "Check Memory Usage") type = 2;
+    else if (typeStr == "Optimize Rendering") type = 3;
 
     if (type == 0) { // Update UI Performance
         m_statusBar->showMessage("UI performance refreshed - repaint optimization applied");
@@ -1501,9 +1422,14 @@ void ArtPlusMainWindow:: performance() {
 void ArtPlusMainWindow::recovery() {
     // Document recovery and stability (Module 19: Desempenho e Auditoracao Geral)
     bool ok;
-    int type = QInputDialog::getItem(this, "Recovery", "Recovery type:",
-        {"Auto-Recovery Check", "Validate Document Structure", "Restore from Auto-Save", "Document Health Report"}, 0, &ok);
+    QString typeStr = QInputDialog::getItem(this, "Recovery", "Recovery type:",
+        {"Auto-Recovery Check", "Validate Document Structure", "Restore from Auto-Save", "Document Health Report"}, 0, false, &ok);
     if (!ok) return;
+
+    int type = 0;
+    if (typeStr == "Validate Document Structure") type = 1;
+    else if (typeStr == "Restore from Auto-Save") type = 2;
+    else if (typeStr == "Document Health Report") type = 3;
 
     if (type == 0) { // Auto-Recovery Check
         // Check for auto-recovery data and attempt recovery
@@ -1597,6 +1523,69 @@ void ArtPlusMainWindow::updateDocumentInfo() {
         m_statusBar->showMessage("Ready");
         return;
     }
+}
+
+// Action serialization
+QJsonDocument Action::toJson() const {
+    QJsonObject obj;
+    obj["type"] = static_cast<int>(type);
+    obj["copiesX"] = copiesX;
+    obj["copiesY"] = copiesY;
+    obj["spacingX"] = spacingX;
+    obj["spacingY"] = spacingY;
+    obj["angle"] = angle;
+    obj["impositionType"] = impositionType;
+    obj["marksType"] = marksType;
+    obj["cutType"] = cutType;
+    obj["description"] = description;
+    return QJsonDocument(obj);
+}
+
+Action Action::fromJson(const QJsonDocument& doc) {
+    Action action;
+    if (doc.isNull()) return action;
+    QJsonObject obj = doc.object();
+    action.type = static_cast<Type>(obj.value("type").toInt());
+    action.copiesX = obj.value("copiesX").toInt();
+    action.copiesY = obj.value("copiesY").toInt();
+    action.spacingX = obj.value("spacingX").toDouble();
+    action.spacingY = obj.value("spacingY").toDouble();
+    action.angle = obj.value("angle").toDouble();
+    action.impositionType = obj.value("impositionType").toInt();
+    action.marksType = obj.value("marksType").toInt();
+    action.cutType = obj.value("cutType").toInt();
+    action.description = obj.value("description").toString();
+    return action;
+}
+
+// ActionList serialization
+QJsonDocument ActionList::toJson() const {
+    QJsonObject obj;
+    obj["name"] = name;
+    obj["timestamp"] = timestamp.toString(Qt::ISODate);
+    QJsonArray actionsArray;
+    for (const auto& action : actions) {
+        actionsArray.append(action.toJson().object());
+    }
+    obj["actions"] = actionsArray;
+    return QJsonDocument(obj);
+}
+
+ActionList ActionList::fromJson(const QJsonDocument& doc) {
+    ActionList list;
+    if (doc.isNull()) return list;
+    QJsonObject obj = doc.object();
+    list.name = obj.value("name").toString();
+    list.timestamp = QDateTime::fromString(obj.value("timestamp").toString(), Qt::ISODate);
+    if (obj.contains("actions") && obj["actions"].isArray()) {
+        QJsonArray actionsArray = obj["actions"].toArray();
+        for (const auto& actionObj : actionsArray) {
+            if (actionObj.isObject()) {
+                list.actions.append(Action::fromJson(QJsonDocument(actionObj.toObject())));
+            }
+        }
+    }
+    return list;
 }
 
 } // namespace ArtPlus
