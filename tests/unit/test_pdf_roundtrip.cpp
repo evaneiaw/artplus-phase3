@@ -74,8 +74,83 @@ private slots:
         QVERIFY(res.ok);
         QCOMPARE(res.pagesImported, 3);
         QCOMPARE(doc.pageOrder().size(), (size_t)3);
+        // 4 paths + 3 texts (clips are first-class objects, counted separately via clipMaskIds)
         QCOMPARE(res.objectsImported, 7);
-        QVERIFY(res.warnings.size() >= 1);
+        QCOMPARE(doc.objects().size(), (size_t)8);
+
+        // The clipping path from page 2 must exist as a first-class model object
+        int clipCount = 0;
+        for (const auto& [id, obj] : doc.objects()) {
+            if (obj->type() == ObjectType::ClippingMask) ++clipCount;
+        }
+        QCOMPARE(clipCount, 1);
+    }
+
+    void testClipMaskRoundTrip() {
+        PDF::PdfDocument pdf;
+        QVERIFY(pdf.open(fixture("test_multipage.pdf")));
+        Document doc;
+        auto res = PdfImporter::import(pdf, doc);
+        QVERIFY(res.ok);
+
+        // Find clipping mask + an object that references it
+        ObjectId maskId = 0;
+        bool foundClipUser = false;
+        for (const auto& [id, obj] : doc.objects()) {
+            if (obj->type() == ObjectType::ClippingMask) maskId = id;
+        }
+        QVERIFY2(maskId != 0, "no clipping mask imported");
+        for (const auto& [id, obj] : doc.objects()) {
+            for (ObjectId m : obj->clipMaskIds()) if (m == maskId) foundClipUser = true;
+        }
+        QVERIFY2(foundClipUser, "no object references the imported clip mask");
+
+        // Serialize + reload: mask and reference must survive with a consistent id
+        QString tmp = QDir::temp().filePath("artplus_clip_test.artplus");
+        QVERIFY(DocumentSerializer::save(doc, tmp));
+        Document doc2;
+        QVERIFY(DocumentSerializer::load(tmp, doc2));
+        bool maskFound2 = false;
+        ObjectId newMaskId = 0;
+        for (const auto& [id, obj] : doc2.objects()) {
+            if (obj->type() == ObjectType::ClippingMask) { maskFound2 = true; newMaskId = id; }
+        }
+        QVERIFY2(maskFound2, "clipping mask lost after round-trip");
+        bool clipUser2 = false;
+        for (const auto& [id, obj] : doc2.objects()) {
+            for (ObjectId m : obj->clipMaskIds()) if (m == newMaskId) clipUser2 = true;
+        }
+        QVERIFY2(clipUser2, "clip mask reference lost after round-trip");
+
+        // Export modified PDF: the clip operator must appear in the file
+        doc.setModified(true);
+        QString out = QDir::temp().filePath("artplus_clip_export.pdf");
+        QVERIFY(PDF::PdfExporter::exportPdf(doc, out, fixture("test_multipage.pdf")));
+        QFile f(out);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QByteArray bytes = f.readAll();
+        QVERIFY2(bytes.contains(" W") || bytes.contains("W*"), "exported PDF does not contain a clip W operator");
+        QVERIFY2(!bytes.contains("ClippingMask"), "internal class name leaked into PDF output");
+    }
+
+    void testExportEmbedsImageXObjects() {
+        PDF::PdfDocument pdf;
+        QVERIFY(pdf.open(fixture("test_images.pdf")));
+        Document doc;
+        auto res = PdfImporter::import(pdf, doc);
+        QVERIFY(res.ok);
+        QCOMPARE(res.imagesImported, 1);
+
+        doc.setModified(true); // force regeneration
+        QString out = QDir::temp().filePath("artplus_image_export_test.pdf");
+        QVERIFY(PDF::PdfExporter::exportPdf(doc, out, fixture("test_images.pdf")));
+
+        QFile f(out);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QByteArray bytes = f.readAll();
+        QVERIFY2(bytes.contains("/Subtype /Image"), "regenerated PDF has no Image XObject");
+        QVERIFY2(bytes.contains("/Type /XObject"), "regenerated PDF has no XObject type");
+        QVERIFY2(bytes.contains("FlateDecode"), "regenerated PDF does not use FlateDecode for the image");
     }
 
     void testExportAndReimport() {

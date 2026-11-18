@@ -55,11 +55,19 @@ struct ClippedArea {
     bool evenOdd = false;
 };
 
+// Ordered event stream for faithful model construction and grouping.
+// indices refer to the paths/texts/images/clips vectors of ParseResult.
+struct Event {
+    enum class T { Path, Text, Image, Clip, Push, Pop } t;
+    int index = -1;
+};
+
 struct ParseResult {
     std::vector<ParsedPath> paths;
     std::vector<ParsedText> texts;
     std::vector<ParsedImage> images;
     std::vector<ClippedArea> clips;
+    std::vector<Event> sequence;
     std::vector<QString> unsupported;
     bool hadError = false;
 };

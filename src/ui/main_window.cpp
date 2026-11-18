@@ -18,15 +18,98 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QStyleOptionGraphicsItem>
 #include <QGraphicsPixmapItem>
+#include <QGraphicsRectItem>
 #include <QFontMetrics>
+#include <QLabel>
+#include <unordered_set>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace ArtPlus {
+
+// ==================================================== clip-aware graphics items
+static QPainterPath painterPathFromClipMask(const std::vector<ClippingMaskObject::Element>& elems, bool evenOdd) {
+    QPainterPath path;
+    path.setFillRule(evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+    QPointF current;
+    bool started = false;
+    for (const auto& e : elems) {
+        switch (e.t) {
+            case ClippingMaskObject::Element::T::Move:
+                path.moveTo(e.p1);
+                current = e.p1;
+                started = true;
+                break;
+            case ClippingMaskObject::Element::T::Line:
+                if (!started) { path.moveTo(e.p1); current = e.p1; started = true; }
+                else { path.lineTo(e.p1); current = e.p1; }
+                break;
+            case ClippingMaskObject::Element::T::Cubic:
+                if (!started) { path.moveTo(current); }
+                else { path.cubicTo(e.p1, e.p2, e.p3); current = e.p3; }
+                break;
+            case ClippingMaskObject::Element::T::Close:
+                path.closeSubpath();
+                break;
+        }
+    }
+    return path;
+}
+
+template <class Item>
+class ClipAwareItem : public Item {
+public:
+    template <class... Args>
+    explicit ClipAwareItem(Args&&... args) : Item(std::forward<Args>(args)...) {}
+    void setClipPaths(const std::vector<QPainterPath>& paths) { m_clipPaths = paths; }
+protected:
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override {
+        if (m_clipPaths.empty()) {
+            Item::paint(painter, option, widget);
+            return;
+        }
+        QPainterPath combined = m_clipPaths.front();
+        for (size_t i = 1; i < m_clipPaths.size(); ++i) {
+            combined = combined.intersected(m_clipPaths[i]);
+        }
+        painter->save();
+        painter->setClipPath(combined, Qt::ReplaceClip);
+        Item::paint(painter, option, widget);
+        painter->restore();
+    }
+private:
+    std::vector<QPainterPath> m_clipPaths;
+};
+
+using ClipAwarePathItem = ClipAwareItem<QGraphicsPathItem>;
+using ClipAwareTextItem = ClipAwareItem<QGraphicsSimpleTextItem>;
+using ClipAwarePixmapItem = ClipAwareItem<QGraphicsPixmapItem>;
+
+// Draws an image into the unit square (PDF image semantics: the surrounding
+// cm/CTM maps 0..1 onto the intended rectangle).
+class ImageUnitItem : public QGraphicsItem {
+public:
+    explicit ImageUnitItem(const QImage& img) : m_image(img) {}
+    QRectF boundingRect() const override { return QRectF(0, 0, 1, 1); }
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) override {
+        painter->drawImage(QRectF(0, 0, 1, 1), m_image);
+    }
+private:
+    QImage m_image;
+};
+using ClipAwareImageItem = ClipAwareItem<ImageUnitItem>;
 
 // ================================================================== scene
 void ArtPlusScene::setDocument(Document* doc) {
     m_doc = doc;
+    // Choose the first available page as current
+    if (m_doc && !m_doc->pageOrder().empty()) m_currentPage = m_doc->pageOrder().front();
+    refresh();
+}
+
+void ArtPlusScene::setCurrentPage(PageId id) {
+    m_currentPage = id;
     refresh();
 }
 
@@ -34,11 +117,16 @@ void ArtPlusScene::refresh() {
     clear();
     if (!m_doc) return;
 
+    // Pick the current page; fall back to the first page if unset/missing
+    if (m_currentPage == 0 || m_doc->page(m_currentPage) == nullptr) {
+        if (!m_doc->pageOrder().empty()) m_currentPage = m_doc->pageOrder().front();
+    }
+    auto page = m_doc->page(m_currentPage);
+
     // Background page
-    const auto& pageIds = m_doc->pageOrder();
-    if (!pageIds.empty()) {
-        auto page = m_doc->page(pageIds.front());
-        if (page) {
+    if (page) {
+        const auto& pageIds = m_doc->pageOrder();
+        if (!pageIds.empty()) {
             QRectF pageRect(0, 0, page->boxes().mediaBox.width(), page->boxes().mediaBox.height());
             setSceneRect(pageRect.adjusted(-50, -50, 100, 100));
             // Page background (white paper)
@@ -46,9 +134,45 @@ void ArtPlusScene::refresh() {
         }
     }
 
+    // Only render objects that belong to the current page's layers
+    std::unordered_set<LayerId> pageLayers;
+    if (page) {
+        for (LayerId lid : page->layers()) pageLayers.insert(lid);
+    }
+
     if (!m_doc) return;
 
+    // Build clip mask paths (scene coords) mapped into item-local coords
+    auto clipPathsFor = [this](const std::shared_ptr<DocumentObject>& obj, const QTransform& itemTransform) -> std::vector<QPainterPath> {
+        std::vector<QPainterPath> local;
+        QTransform inv = itemTransform.inverted();
+        for (ObjectId maskId : obj->clipMaskIds()) {
+            auto m = m_doc->object(maskId);
+            if (!m || m->type() != ObjectType::ClippingMask) continue;
+            auto mask = std::dynamic_pointer_cast<ClippingMaskObject>(m);
+            QPainterPath path = painterPathFromClipMask(mask->elements(), mask->evenOdd());
+            local.push_back(inv.map(mask->transform().map(path)));
+        }
+        return local;
+    };
+
     for (const auto& [id, obj] : m_doc->objects()) {
+        if (!pageLayers.empty() && !pageLayers.count(obj->layerId())) continue;
+        if (obj->type() == ObjectType::ClippingMask) {
+            // Draw the mask outline dashed so it is inspectable, but it is not a paintable object
+            auto mask = std::dynamic_pointer_cast<ClippingMaskObject>(obj);
+            if (mask) {
+                QPainterPath path = painterPathFromClipMask(mask->elements(), mask->evenOdd());
+                auto item = new QGraphicsPathItem(path);
+                QPen dashPen(Qt::magenta, 1.0, Qt::DashLine);
+                item->setPen(dashPen);
+                item->setBrush(Qt::NoBrush);
+                item->setData(Qt::UserRole, id);
+                item->setVisible(obj->visible());
+                addItem(item);
+            }
+            continue;
+        }
         if (obj->type() == ObjectType::Path) {
             auto pathObj = std::dynamic_pointer_cast<PathObject>(obj);
             if (!pathObj) continue;
@@ -119,10 +243,13 @@ void ArtPlusScene::refresh() {
                 penStroke.setStyle(Qt::NoPen);
             }
 
-            QGraphicsPathItem* item = new QGraphicsPathItem(painterPath);
+            QTransform objTransform = obj->transform();
+            auto item = new ClipAwarePathItem(painterPath);
             item->setBrush(brushFill);
             item->setPen(hasStroke ? penStroke : QPen(Qt::NoPen));
-            item->setTransform(obj->transform());
+            item->setTransform(objTransform);
+            item->setClipPaths(clipPathsFor(obj, objTransform));
+            item->setOpacity(hasFill ? obj->fillStroke().fillAlpha : obj->fillStroke().strokeAlpha);
             item->setData(Qt::UserRole, id); // ObjectId (uint32)
             if (obj->visible()) item->setVisible(true);
             addItem(item);
@@ -130,7 +257,7 @@ void ArtPlusScene::refresh() {
         else if (obj->type() == ObjectType::Text) {
             auto textObj = std::dynamic_pointer_cast<TextObject>(obj);
             if (!textObj) continue;
-            auto item = new QGraphicsSimpleTextItem(textObj->text());
+            auto item = new ClipAwareTextItem(textObj->text());
             QFont font(textObj->fontFamily(), (int)std::round(textObj->fontSize()));
             font.setBold(textObj->bold());
             font.setItalic(textObj->italic());
@@ -151,8 +278,16 @@ void ArtPlusScene::refresh() {
             item->setBrush(qfill);
             // position from transform, but draw unflipped to avoid mirrored text
             QTransform t = textObj->transform();
-            item->setPos(t.map(QPointF(0, 0)));
-            item->setRotation(t.m11() != 0 ? std::atan2(t.m12(), t.m11()) * 180.0 / M_PI : 0.0);
+            QPointF org = t.map(QPointF(0, 0));
+            item->setPos(org);
+            double rotationDeg = (t.m11() != 0 || t.m12() != 0) ? std::atan2(t.m12(), t.m11()) * 180.0 / M_PI : 0.0;
+            item->setRotation(rotationDeg);
+            // effective item matrix used for local clip mapping
+            QTransform effective;
+            effective.translate(org.x(), org.y());
+            if (rotationDeg != 0.0) effective.rotate(rotationDeg);
+            item->setClipPaths(clipPathsFor(obj, effective));
+            item->setOpacity(obj->fillStroke().fillAlpha);
             item->setData(Qt::UserRole, id);
             item->setVisible(obj->visible());
             addItem(item);
@@ -160,8 +295,11 @@ void ArtPlusScene::refresh() {
         else if (obj->type() == ObjectType::Image) {
             auto imgObj = std::dynamic_pointer_cast<ImageObject>(obj);
             if (!imgObj) continue;
-            QGraphicsPixmapItem* item = new QGraphicsPixmapItem(QPixmap::fromImage(imgObj->image()));
-            item->setTransform(obj->transform());
+            auto item = new ClipAwareImageItem(imgObj->image());
+            QTransform objTransform = obj->transform();
+            item->setTransform(objTransform);
+            item->setClipPaths(clipPathsFor(obj, objTransform));
+            item->setOpacity(obj->fillStroke().fillAlpha);
             item->setData(Qt::UserRole, id);
             item->setVisible(obj->visible());
             addItem(item);
@@ -468,6 +606,13 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     addTool("Export PDF", "Export the document to PDF", &ArtPlusMainWindow::exportPdf);
     toolbar->addSeparator();
 
+    toolbar->addWidget(new QLabel("Page:", toolbar));
+    m_pageCombo = new QComboBox(toolbar);
+    m_pageCombo->setToolTip("Choose the page to view");
+    connect(m_pageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ArtPlusMainWindow::onPageChanged);
+    toolbar->addWidget(m_pageCombo);
+    toolbar->addSeparator();
+
     addTool("Select", "Selection tool (V)", &ArtPlusMainWindow::selectTool);
     addTool("Pan", "Pan/Hand tool (H)", &ArtPlusMainWindow::handTool);
     addTool("Zoom", "Zoom tool (Z)", &ArtPlusMainWindow::zoomTool);
@@ -481,6 +626,12 @@ void ArtPlusMainWindow::setupMenusAndToolbars() {
     addTool("Zoom In", "Zoom in (Ctrl++)", &ArtPlusMainWindow::zoomIn);
     addTool("Zoom Out", "Zoom out (Ctrl+-)", &ArtPlusMainWindow::zoomOut);
     addTool("Fit", "Fit page in window (Ctrl+0)", &ArtPlusMainWindow::zoomFit);
+}
+
+void ArtPlusMainWindow::viewPage(int index) {
+    if (m_pageCombo && index >= 0 && index < m_pageCombo->count()) {
+        m_pageCombo->setCurrentIndex(index); // emits currentIndexChanged -> onPageChanged
+    }
 }
 
 bool ArtPlusMainWindow::openPdfPath(const QString& path) {
@@ -602,12 +753,53 @@ void ArtPlusMainWindow::updateModifiedIndicator() {
 
 void ArtPlusMainWindow::rebuildScene() {
     m_scene->setDocument(&m_document);
+    updatePageCombo();
+
+    // Layers list shows the current page's layers
     m_layersList->clear();
-    for (LayerId lid : m_document.layerOrder()) {
-        auto layer = m_document.layer(lid);
-        if (layer) m_layersList->addItem(layer->name() + (layer->visible() ? "" : " (hidden)"));
+    if (!m_pageIds.empty()) {
+        if (auto page = m_document.page(m_pageIds.front())) {
+            for (LayerId lid : page->layers()) {
+                auto layer = m_document.layer(lid);
+                if (layer) m_layersList->addItem(layer->name() + (layer->visible() ? "" : " (hidden)"));
+            }
+        }
+    } else {
+        for (LayerId lid : m_document.layerOrder()) {
+            auto layer = m_document.layer(lid);
+            if (layer) m_layersList->addItem(layer->name() + (layer->visible() ? "" : " (hidden)"));
+        }
     }
     m_objectTree->clear();
+}
+
+void ArtPlusMainWindow::updatePageCombo() {
+    m_pageIds.clear();
+    if (!m_pageCombo) return;
+    m_pageCombo->blockSignals(true);
+    m_pageCombo->clear();
+    int i = 0;
+    for (PageId pid : m_document.pageOrder()) {
+        m_pageIds.push_back(pid);
+        m_pageCombo->addItem(QString("Page %1").arg(i + 1));
+        ++i;
+    }
+    if (!m_pageIds.empty()) m_pageCombo->setCurrentIndex(0);
+    m_pageCombo->blockSignals(false);
+}
+
+void ArtPlusMainWindow::onPageChanged(int index) {
+    if (index < 0 || index >= (int)m_pageIds.size()) return;
+    m_scene->setCurrentPage(m_pageIds[index]);
+    // update layers dock to reflect the current page
+    m_layersList->clear();
+    if (auto page = m_document.page(m_pageIds[index])) {
+        for (LayerId lid : page->layers()) {
+            auto layer = m_document.layer(lid);
+            if (layer) m_layersList->addItem(layer->name() + (layer->visible() ? "" : " (hidden)"));
+        }
+    }
+    m_statusBar->showMessage(QString("Viewing page %1 of %2").arg(index + 1).arg(m_pageIds.size()));
 }
 
 void ArtPlusMainWindow::updateDocumentInfo() {

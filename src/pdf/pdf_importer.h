@@ -28,7 +28,6 @@ public:
     static PdfImportResult import(const PDF::PdfDocument& doc, Document& out);
 
 private:
-    static QImage readImageXObject(const PDF::PdfDocument& doc, const PDF::ParsedImage& imgRef);
     static Color cmykToRgbColor(const Color& cmyk);
     static QRectF pathBounds(const std::vector<PDF::ParsedPath::Element>& elements);
 };

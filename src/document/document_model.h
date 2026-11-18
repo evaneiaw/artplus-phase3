@@ -98,6 +98,8 @@ struct FillStroke {
     float miterLimit = 10.0f;
     std::vector<float> dashPattern;
     float dashOffset = 0.0f;
+    float fillAlpha = 1.0f;
+    float strokeAlpha = 1.0f;
 };
 
 struct GradientStop {
@@ -147,6 +149,11 @@ public:
     ObjectId parentId() const { return m_parentId; }
     void setParentId(ObjectId id) { m_parentId = id; }
 
+    const std::vector<ObjectId>& clipMaskIds() const { return m_clipMasks; }
+    void setClipMaskIds(const std::vector<ObjectId>& ids) { m_clipMasks = ids; }
+    void addClipMaskId(ObjectId id) { m_clipMasks.push_back(id); }
+    void clearClipMaskIds() { m_clipMasks.clear(); }
+
     const std::vector<ObjectId>& children() const { return m_children; }
     void addChild(ObjectId id) { m_children.push_back(id); }
     void removeChild(ObjectId id);
@@ -162,6 +169,7 @@ private:
     FillStroke m_fillStroke;
     LayerId m_layerId;
     ObjectId m_parentId;
+    std::vector<ObjectId> m_clipMasks;
     std::vector<ObjectId> m_children;
 };
 
@@ -242,6 +250,35 @@ public:
 
     QRectF boundingBox() const override;
     std::shared_ptr<DocumentObject> clone() const override;
+};
+
+// Holds a clipping path imported from a PDF/vector operation (W / W*).
+// Other objects reference this mask through DocumentObject::clipMaskIds().
+class ClippingMaskObject : public DocumentObject {
+public:
+    ClippingMaskObject() : DocumentObject(ObjectType::ClippingMask) {}
+
+    struct Element {
+        enum class T { Move, Line, Cubic, Close } t;
+        QPointF p1, p2, p3;
+    };
+
+    const std::vector<Element>& elements() const { return m_elements; }
+    std::vector<Element>& elements() { return m_elements; }
+    void addMove(const QPointF& p) { m_elements.push_back({Element::T::Move, p, {}, {}}); }
+    void addLine(const QPointF& p) { m_elements.push_back({Element::T::Line, p, {}, {}}); }
+    void addCurve(const QPointF& c1, const QPointF& c2, const QPointF& end) { m_elements.push_back({Element::T::Cubic, c1, c2, end}); }
+    void closePath() { m_elements.push_back({Element::T::Close, {}, {}, {}}); }
+
+    bool evenOdd() const { return m_evenOdd; }
+    void setEvenOdd(bool e) { m_evenOdd = e; }
+
+    QRectF boundingBox() const override;
+    std::shared_ptr<DocumentObject> clone() const override;
+
+private:
+    std::vector<Element> m_elements;
+    bool m_evenOdd = false;
 };
 
 class Layer {

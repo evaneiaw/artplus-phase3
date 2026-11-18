@@ -193,13 +193,73 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
     std::map<int, ImageEmbedding> imagesByNum;
     for (const auto& embeds : pageImageData) for (const auto& emb : embeds) imagesByNum[emb.objectNum] = emb;
 
+    // Assign ExtGState object numbers to objects that carry alpha < 1
+    const int alphaGsBase = nextImageNum;
+    std::map<ObjectId, int> alphaGsNum;
+    int nextGs = alphaGsBase;
+    for (const auto& order : orders) {
+        for (const auto& obj : order) {
+            if (obj->fillStroke().fillAlpha < 0.999f || obj->fillStroke().strokeAlpha < 0.999f) {
+                if (alphaGsNum.find(obj->id()) == alphaGsNum.end()) alphaGsNum[obj->id()] = nextGs++;
+            }
+        }
+    }
+    const int alphaGsEnd = nextGs;
+    std::vector<std::vector<int>> pageGsNums(orders.size());
+    for (size_t pi = 0; pi < orders.size(); ++pi) {
+        for (const auto& obj : orders[pi]) {
+            auto it = alphaGsNum.find(obj->id());
+            if (it != alphaGsNum.end()) pageGsNums[pi].push_back(it->second);
+        }
+    }
+
     // Build content streams with image Do operators
     std::vector<std::string> contents;
     for (size_t pi = 0; pi < orders.size(); ++pi) {
         std::ostringstream content;
         size_t imgIdx = 0;
+        auto emitClips = [&](const DocumentObject& obj) {
+            for (ObjectId mid : obj.clipMaskIds()) {
+                auto m = doc.object(mid);
+                if (!m || m->type() != ObjectType::ClippingMask) continue;
+                auto mask = std::dynamic_pointer_cast<ClippingMaskObject>(m);
+                QTransform mt = mask->transform();
+                for (const auto& e : mask->elements()) {
+                    switch (e.t) {
+                        case ClippingMaskObject::Element::T::Move: {
+                            QPointF p = mt.map(e.p1);
+                            content << p.x() << " " << p.y() << " m\n";
+                            break;
+                        }
+                        case ClippingMaskObject::Element::T::Line: {
+                            QPointF p = mt.map(e.p1);
+                            content << p.x() << " " << p.y() << " l\n";
+                            break;
+                        }
+                        case ClippingMaskObject::Element::T::Cubic: {
+                            QPointF p1 = mt.map(e.p1), p2 = mt.map(e.p2), p3 = mt.map(e.p3);
+                            content << p1.x() << " " << p1.y() << " "
+                                    << p2.x() << " " << p2.y() << " "
+                                    << p3.x() << " " << p3.y() << " c\n";
+                            break;
+                        }
+                        case ClippingMaskObject::Element::T::Close:
+                            content << "h\n";
+                            break;
+                    }
+                }
+                content << (mask->evenOdd() ? "W*\n" : "W\n");
+                content << "n\n";
+            }
+        };
         for (const auto& obj : orders[pi]) {
+            if (obj->type() == ObjectType::ClippingMask) continue; // emitted via clip ops
             content << "q\n";
+            emitClips(*obj);
+            auto gsIt = alphaGsNum.find(obj->id());
+            if (gsIt != alphaGsNum.end()) {
+                content << "/GS" << gsIt->second << " gs\n";
+            }
             QTransform t = obj->transform();
             content << t.m11() << " " << t.m12() << " " << t.m21() << " " << t.m22() << " " << t.m31() << " " << t.m32() << " cm\n";
 
@@ -281,6 +341,11 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
             for (int xobj : pageImageNums[i]) o << " /Im" << xobj << " " << xobj << " 0 R";
             o << " >>";
         }
+        if (!pageGsNums[i].empty()) {
+            o << " /ExtGState <<";
+            for (int gs : pageGsNums[i]) o << " /GS" << gs << " " << gs << " 0 R";
+            o << " >>";
+        }
         o << " >> >>";
         add(o.str());
     }
@@ -311,6 +376,25 @@ bool PdfExporter::exportPdf(const Document& doc, const QString& outPath,
           << " /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /FlateDecode /Length " << compressed.size()
           << " >>\nstream\n";
         addStream(o.str(), std::move(compressed));
+    }
+
+    // ExtGState objects for translucent objects (alphaGsBase .. alphaGsEnd-1)
+    for (int gs = alphaGsBase; gs < alphaGsEnd; ++gs) {
+        // Find the object with this gs number to read its alphas
+        float ca = 1.0f, CA = 1.0f;
+        for (const auto& pair : alphaGsNum) {
+            if (pair.second == gs) {
+                auto obj = doc.object(pair.first);
+                if (obj) {
+                    ca = obj->fillStroke().fillAlpha;
+                    CA = obj->fillStroke().strokeAlpha;
+                }
+                break;
+            }
+        }
+        std::ostringstream o;
+        o << "<< /Type /ExtGState /ca " << ca << " /CA " << CA << " /BM /Normal >>";
+        add(o.str());
     }
 
     // Assemble the file

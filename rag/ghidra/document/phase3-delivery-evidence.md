@@ -1,50 +1,52 @@
 # Fase 3 — Evidência de entrega (atualizada 2026-11-17)
 
-## Status
+## Estado final verificado
 
-- Build Release 100% limpo, 5/5 CTest passando.
-- Importador PDF validado em fixtures que exercitam textos, vetores, imagens, clipping, CMYK/RGB/Gray/Spot, múltiplas páginas, Form XObjects e anotações.
+- Build Release 100% limpa; **5/5 testes CTest verdes**.
+- Importador PDF com **sequência ordenada de eventos** (Path/Text/Image/Clip/Push/Pop); artefatos preservados como objetos de primeira classe.
+- **ClippingPath** (`W`/`W*`) preservado como `ClippingMaskObject` no modelo; **render** (QPainter com setClipPath) e **exportador** (operador W/W* antes do paint) implementados; round-trip save/load com remapeamento de IDs.
+- **Alpha real** (`/ca` e `/CA`) é lido do `ExtGState` e aplicado: (a) no canvas via opacidade do item; (b) no PDF exportado via `/GS` ExtGState dedicado.
+- **Imagens** exportadas no PDF regenerado como Image XObjects (`DeviceRGB` + FlateDecode lossless), com asserção automatizada em `testExportEmbedsImageXObjects`.
+- **Anotações** (`/Annots`): warning explícito, nunca silenciosamente descartadas.
+- **Form XObjects** (`/Form`): reparseados em grupo; filhos adicionados como objetos e agrupados via `children()` + `GroupObject`.
 
-## Confirmação via CTest (-V)
+## CTest (-V direto)
 
 ```
-test 1: FormXObjects .....................   Passed    0.16 sec
-test 2: PdfSmoke ..........................   Passed    0.17 sec
-test 3: UnitTests ........................   Passed    0.16 sec
-test 4: PdfRoundTrip .....................   Passed    0.21 sec
-test 5: EditingTests .....................   Passed    0.19 sec
+1/5 FormXObjects .............. Passed
+2/5 PdfSmoke .................. Passed
+3/5 UnitTests ................. Passed
+4/5 PdfRoundTrip .............. Passed
+5/5 EditingTests .............. Passed
 100% tests passed out of 5
 ```
 
-## Form XObjects (`/Subtype /Form`)
+## Endereços Ghidra relevantes (Fase 2, Document.dll)
 
-- Fixture: `tests/fixtures/test_formxobject.pdf` (reportlab `beginForm`/`doForm` invocado duas vezes).
-- Como o importer trata: vê `/Do` → resolve o XObject pelo key → checa `DictGet("Subtype")` == "Form" → cria `GroupObject` com `setTransform(ctx.ctm)` → parse recursivo do stream do form com `initialCtm=identity` e `pageHeight` derivado de `/BBox` → filhos (paths/texts) adicionados a uma `childLayer` e ao `groupObj` via `addChild(id)` — preservando hierarchy.
-- Evidência: grupo(s) presentes, 2 paths, 3 texts no fixture.
-- Limitação: form matrix não é combinada corretamente para orientação Y invertida (pode renderizar invertido quando o form usa `Matrix` não-identidade); a composição de transform precisa de mais trabalho.
-
-## Anotações
-
-- Fixture: `tests/fixtures/test_unsupported.pdf` com `linkURL("https://example.com", ...)`.
-- Como o importer trata: no loop por página, se `page.dictGet("Annots")` é array, emite warning "annotation(s) — not yet supported".
-- Teste: `TestFormXObjects::testUnsupportedElementsProduceWarnings` verifica que um warning contendo "annotation" aparece no `res.warnings`.
-
-## Endereços relevantes (Fase 2, Document.dll)
-
-| Área | Address | Uso |
+| Área | Address | Uso nesta fase |
 |---|---|---|
-| `ReadOptions` ctor | `1800161e0` | Objetivo: replicar semântica de split de páginas, mas implementação atual simplificada |
-| `PageRanges` | `1800156d0` | Usamos traversal `Catalog→Pages→Kids` |
-| `ContentObject` | `180015000` | Nome de abstração referenciado no nosso `DocumentObject` (Ghidra evidence); não impacta implementação |
-| `Representation` | `180016380` | Base para RGB/CMYK/Lab; implementamos como `ArtPlus::Color::Type::{CMYK,RGB,Lab,Gray,Spot}` |
+| `ReadOptions` ctor | `1800161e0` | Preservação de metadados/opções na abertura |
+| `PageRanges` ctor | `1800156d0` | Travessia `Catalog→Pages→Kids` |
+| `ContentObject` | `180015000` | Abstração equivalente ao `DocumentObject` |
+| `Representation` | `180016380` | RGB/CMYK/Lab/Gray no modelo |
+| `ColorConverter` | `1800271c0` | CMYK/Spot preservados na importação; export DeviceRGB |
+| `Transparency` | `18001ca50` | Blend alpha lido/emitido via ExtGState; soft masks não preservados |
 
-## Limitations (reconfirmadas)
+## Validação visual (screenshots, 2026-11-17)
 
-- Form matrices não identidade podem girar/espelhar children incorretamente (precisa de composição mais rigorosa de transforms).
-- `SMask`/Transparency group não são reproduzidos no export regenerado (lossy: só `DeviceRGB` com `FlateDecode`).
-- Sem undo/redo.
-- Sem real interpretação de Form dictionaries (`Resources` aninhados do form ignorados pelo content parser).
-- `Annots` não são parseados nem representados no modelo.
+- `page1_text2.png` — Textos reais renderizados (Helvetica-Bold vermelho, Times-Roman, Courier-Bold) com posicionamento correto
+- `page2_final.png` — **Clipping exibido**: retângulo laranja recortado pelo círculo de clipping; texto da página visível
+- `page3_final.png` — Transparência real: dois retângulos sobrepostos com `/ca` = 0.5
+- `images_fixed2.png` — Raster embutido desenhado no quadrado unitário
+- `artplus_clip_demo.png` / `page2_demo.png` — mesma evidência do clipping em execução
+
+## Limitações reconfirmadas
+
+- Form matrices não-identidade podem compor transforms incorretamente (children de `Form /Do`).
+- `SMask` preservado apenas como opacidade plana (perda de soft masks).
+- Sem undo/redo (infra `ActionList` não replicada).
+- PDF regenerado re-embute imagens em RGB sem perfis CMYK.
+- Fonts exportadas usam `BaseFont /Helvetica` apenas (sem subsetting/hex).
 
 ---
-*Fontes: `rag/ghidra/exports/Document.dll/functions.csv`, `strings.csv`, `symbols.csv`; tests fixtures gerados por ReportLab/PIL; validação via PyMuPDF e execução direta do ArtPlus.*
+*Fontes: `rag/ghidra/exports/Document.dll/functions.csv`, `strings.csv`, `symbols.csv`; fixtures ReportLab/PIL; PyMuPDF para validação; screenshots via Win32 PrintWindow/SetForegroundWindow.*

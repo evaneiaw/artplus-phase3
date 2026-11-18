@@ -10,6 +10,7 @@
 #include <QDockWidget>
 #include <QTreeWidget>
 #include <QMenuBar>
+#include <QComboBox>
 #include <memory>
 #include <vector>
 
@@ -24,6 +25,8 @@ public:
     Document* document() const { return m_doc; }
     void refresh();
     bool hasItems() const { return !QGraphicsScene::items().isEmpty(); }
+    void setCurrentPage(PageId id);
+    PageId currentPage() const { return m_currentPage; }
 
     // Selection helpers
     std::vector<ObjectId> selectedObjectIds() const;
@@ -41,6 +44,7 @@ protected:
 
 private:
     Document* m_doc = nullptr;
+    PageId m_currentPage = 0;
     bool m_dragging = false;
     QPointF m_dragStart;
     bool m_rubberBand = false;
@@ -84,6 +88,7 @@ public:
     explicit ArtPlusMainWindow(QWidget* parent = nullptr);
     ~ArtPlusMainWindow() override = default;
     bool openPdfPath(const QString& path);
+    void viewPage(int index); // 0-based; triggers onPageChanged via the combo
 
 private slots:
     void openPdf();
@@ -101,6 +106,7 @@ private slots:
     void deleteSelected();
     void onSelectionChanged(const std::vector<ObjectId>& ids);
     void updateModifiedIndicator();
+    void onPageChanged(int index);
 
 private:
     ArtPlusScene* m_scene = nullptr;
@@ -112,9 +118,12 @@ private:
     QDockWidget* m_objectsDock = nullptr;
     QTreeWidget* m_objectTree = nullptr;
     QStatusBar* m_statusBar = nullptr;
+    QComboBox* m_pageCombo = nullptr;
+    std::vector<PageId> m_pageIds;
 
     void setupUi();
     void setupMenusAndToolbars();
+    void updatePageCombo();
     void rebuildScene();
     void updateDocumentInfo();
 };

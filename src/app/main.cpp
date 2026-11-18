@@ -8,6 +8,7 @@ int main(int argc, char *argv[]) {
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addOption(QCommandLineOption("open", "Open PDF file on startup", "pdf"));
+    parser.addOption(QCommandLineOption("page", "Switch to page N (1-based) after opening", "n"));
     parser.addOption(QCommandLineOption("quit-after", "Quit after N seconds (for smoke testing)", "sec"));
     parser.process(app);
 
@@ -16,7 +17,15 @@ int main(int argc, char *argv[]) {
 
     if (parser.isSet("open")) {
         QString path = parser.value("open");
-        window.openPdfPath(path);
+        if (!window.openPdfPath(path)) {
+            qCritical("openPdfPath failed for: %s", qPrintable(path));
+            return 2;
+        }
+        if (parser.isSet("page")) {
+            bool ok = false;
+            int page = parser.value("page").toInt(&ok);
+            if (ok && page >= 1) window.viewPage(page - 1);
+        }
     }
     if (parser.isSet("quit-after")) {
         int sec = parser.value("quit-after").toInt();

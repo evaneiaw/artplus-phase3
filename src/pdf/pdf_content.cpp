@@ -260,6 +260,7 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
         p.strokeAlpha = ctx.strokeAlpha;
         p.evenOddFill = evenOdd;
         out.paths.push_back(p);
+        out.sequence.push_back({Event::T::Path, (int)out.paths.size() - 1});
         ctx.curPath.clear();
     };
 
@@ -280,14 +281,16 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
         const std::string& o = op.raw;
 
         // -------- graphics state
-        if (o == "q") { ctx.stack.push_back(ctx.ctm); operands.clear(); continue; }
-        if (o == "Q") { if (!ctx.stack.empty()) { ctx.ctm = ctx.stack.back(); ctx.stack.pop_back(); } operands.clear(); continue; }
+        if (o == "q") { ctx.stack.push_back(ctx.ctm); out.sequence.push_back({Event::T::Push, -1}); operands.clear(); continue; }
+        if (o == "Q") { if (!ctx.stack.empty()) { ctx.ctm = ctx.stack.back(); ctx.stack.pop_back(); } out.sequence.push_back({Event::T::Pop, -1}); operands.clear(); continue; }
         if (o == "cm" && operands.size() >= 6) {
             size_t b = operands.size() - 6;
             double a = operands[b].number(), bb = operands[b+1].number(),
                    c = operands[b+2].number(), d = operands[b+3].number(),
                    e = operands[b+4].number(), f = operands[b+5].number();
-            ctx.ctm = ctx.ctm * QTransform(a, bb, c, d, e, f);
+            // Qt semantics: a * b applies a, then b. A new cm must be applied
+            // to user space before the already-accumulated CTM.
+            ctx.ctm = QTransform(a, bb, c, d, e, f) * ctx.ctm;
             operands.clear(); continue;
         }
         if (o == "w") { if (!operands.empty()) ctx.lineWidth = operands.back().number(); operands.clear(); continue; }
@@ -413,6 +416,7 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
                 area.elements = ctx.curPath;
                 area.evenOdd = (o == "W*");
                 out.clips.push_back(area);
+                out.sequence.push_back({Event::T::Clip, (int)out.clips.size() - 1});
             }
             operands.clear(); continue;
         }
@@ -423,7 +427,18 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
         if (o == "Tf") {
             if (operands.size() >= 2) {
                 PdfValue fontOp = operands[operands.size()-2];
-                ctx.fontName = fontOp.isName() ? fontOp.nameValue() : QString("Helvetica");
+                if (fontOp.isName()) {
+                    std::string key = fontOp.nameValue().toStdString();
+                    // Resolve the /Font resource dictionary to get the BaseFont name
+                    PdfValue fonts = resources.dictGet("Font");
+                    if (fonts.isRef()) fonts = doc.resolve(fonts);
+                    PdfValue f = fonts.dictGet(key);
+                    if (f.isRef()) f = doc.resolve(f);
+                    PdfValue base = f.dictGet("BaseFont");
+                    ctx.fontName = base.isName() ? base.nameValue() : QString::fromStdString(key);
+                } else {
+                    ctx.fontName = QString("Helvetica");
+                }
                 ctx.fontSize = operands.back().number();
             }
             operands.clear(); continue;
@@ -477,9 +492,12 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
                 t.fontName = ctx.fontName;
                 t.fontSize = (float)ctx.fontSize;
                 t.fillColor = ctx.fillColor;
-                t.transform = ctx.ctm * ctx.textMatrix;
+                // Qt semantics: a * b applies a first, then b. PDF wants Tm then CTM flip =>
+                // textMatrix * ctm.
+                t.transform = ctx.textMatrix * ctx.ctm;
                 t.fillAlpha = ctx.fillAlpha;
                 out.texts.push_back(t);
+                out.sequence.push_back({Event::T::Text, (int)out.texts.size() - 1});
             }
             operands.clear(); continue;
         }
@@ -495,6 +513,7 @@ ParseResult PdfContentParser::parse(const QByteArray& content,
                     img.displayWidth = std::abs(ctx.ctm.m11());
                     img.displayHeight = std::abs(ctx.ctm.m22());
                     out.images.push_back(img);
+                    out.sequence.push_back({Event::T::Image, (int)out.images.size() - 1});
                 }
             }
             operands.clear(); continue;

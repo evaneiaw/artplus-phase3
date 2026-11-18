@@ -40,6 +40,8 @@ static QJsonObject fillStrokeToJson(const FillStroke& fs) {
     for (float v : fs.dashPattern) dash.append((double)v);
     o["dashPattern"] = dash;
     o["dashOffset"] = (double)fs.dashOffset;
+    o["fillAlpha"] = (double)fs.fillAlpha;
+    o["strokeAlpha"] = (double)fs.strokeAlpha;
     return o;
 }
 
@@ -53,6 +55,8 @@ static FillStroke fillStrokeFromJson(const QJsonObject& o) {
     fs.miterLimit = (float)o.value("miterLimit").toDouble(10.0);
     for (const auto& v : o.value("dashPattern").toArray()) fs.dashPattern.push_back((float)v.toDouble());
     fs.dashOffset = (float)o.value("dashOffset").toDouble(0.0);
+    fs.fillAlpha = (float)o.value("fillAlpha").toDouble(1.0);
+    fs.strokeAlpha = (float)o.value("strokeAlpha").toDouble(1.0);
     return fs;
 }
 
@@ -138,6 +142,9 @@ static QJsonObject objectToJson(const DocumentObject& obj) {
     o["fillStroke"] = fillStrokeToJson(obj.fillStroke());
     o["layerId"] = (int)obj.layerId();
     o["parentId"] = (int)obj.parentId();
+    QJsonArray clipMasks;
+    for (ObjectId c : obj.clipMaskIds()) clipMasks.append((int)c);
+    o["clipMasks"] = clipMasks;
     QJsonArray children;
     for (ObjectId c : obj.children()) children.append((int)c);
     o["children"] = children;
@@ -156,6 +163,19 @@ static QJsonObject objectToJson(const DocumentObject& obj) {
         }
         o["elements"] = elems;
         o["closed"] = p.isClosed();
+    } else if (obj.type() == ObjectType::ClippingMask) {
+        auto& mask = static_cast<const ClippingMaskObject&>(obj);
+        QJsonArray elems;
+        for (const auto& e : mask.elements()) {
+            QJsonObject eo;
+            eo["t"] = (int)e.t;
+            eo["p1x"] = e.p1.x(); eo["p1y"] = e.p1.y();
+            eo["p2x"] = e.p2.x(); eo["p2y"] = e.p2.y();
+            eo["p3x"] = e.p3.x(); eo["p3y"] = e.p3.y();
+            elems.append(eo);
+        }
+        o["elements"] = elems;
+        o["evenOdd"] = mask.evenOdd();
     } else if (obj.type() == ObjectType::Text) {
         auto& t = static_cast<const TextObject&>(obj);
         o["text"] = t.text();
@@ -193,6 +213,19 @@ static std::shared_ptr<DocumentObject> objectFromJson(const QJsonObject& o) {
         }
         p->setClosed(o.value("closed").toBool());
         obj = p;
+    } else if (type == ObjectType::ClippingMask) {
+        auto mask = std::make_shared<ClippingMaskObject>();
+        for (const auto& ev : o.value("elements").toArray()) {
+            QJsonObject e = ev.toObject();
+            ClippingMaskObject::Element el;
+            el.t = (ClippingMaskObject::Element::T)e.value("t").toInt();
+            el.p1 = QPointF(e.value("p1x").toDouble(), e.value("p1y").toDouble());
+            el.p2 = QPointF(e.value("p2x").toDouble(), e.value("p2y").toDouble());
+            el.p3 = QPointF(e.value("p3x").toDouble(), e.value("p3y").toDouble());
+            mask->elements().push_back(el);
+        }
+        mask->setEvenOdd(o.value("evenOdd").toBool());
+        obj = mask;
     } else if (type == ObjectType::Text) {
         auto t = std::make_shared<TextObject>();
         t->setText(o.value("text").toString());
@@ -222,6 +255,8 @@ static std::shared_ptr<DocumentObject> objectFromJson(const QJsonObject& o) {
     obj->fillStroke() = fillStrokeFromJson(o.value("fillStroke").toObject());
     obj->setLayerId((LayerId)o.value("layerId").toInt());
     obj->setParentId((ObjectId)o.value("parentId").toInt());
+    QJsonArray clipMasks = o.value("clipMasks").toArray();
+    for (const auto& cv : clipMasks) obj->addClipMaskId((ObjectId)cv.toInt());
     QJsonArray children = o.value("children").toArray();
     for (const auto& cv : children) obj->addChild((ObjectId)cv.toInt());
     // restore explicit id (monotonic counter already moved past it)
@@ -318,27 +353,52 @@ bool DocumentSerializer::fromJson(const QJsonObject& json, Document& out) {
     for (const auto& o : objs) {
         auto obj = objectFromJson(o);
         objectMap[o.value("id").toInt()] = obj->id();
-        // remap layer id
+        // remap layer id; also register the object in the layer's member list
         int oldLayer = o.value("layerId").toInt();
-        if (layerMap.count(oldLayer)) obj->setLayerId(layerMap[oldLayer]);
+        if (layerMap.count(oldLayer)) {
+            obj->setLayerId(layerMap[oldLayer]);
+            if (auto layer = out.layer(layerMap[oldLayer])) layer->addObject(obj->id());
+        }
         int oldParent = o.value("parentId").toInt();
         (void)oldParent;
         out.addObject(obj);
     }
-    // children remap
+    // children + clip mask remap (ids change on load; rewrite references)
     for (const auto& o : objs) {
         int oldObjId = o.value("id").toInt();
         ObjectId newObjId = objectMap[oldObjId];
         auto obj = out.object(newObjId);
         if (!obj) continue;
-        // clear and re-add remapped children
+
+        // Remap children: drop stored (old) ids, re-add mapped ids
         QJsonArray children = o.value("children").toArray();
-        // Note: children list was already set; we need to remap.
-        // Rebuild by clearing and re-adding via removeChild/addChild.
-        // Since we can't clear vector directly, use a fresh object swap:
-        // For simplicity, leave the stored ids as-is; callers that need deep hierarchy
-        // should resolve via objectMap (documented limitation).
-        (void)newObjId; (void)children;
+        std::vector<ObjectId> oldIds;
+        for (const auto& cv : children) oldIds.push_back((ObjectId)cv.toInt());
+        for (ObjectId oldChild : oldIds) obj->removeChild(oldChild);
+        for (ObjectId oldChild : oldIds) {
+            auto it = objectMap.find((int)oldChild);
+            if (it != objectMap.end()) obj->addChild(it->second);
+        }
+
+        // Remap clip mask references
+        QJsonArray clipMasks = o.value("clipMasks").toArray();
+        std::vector<ObjectId> newMasks;
+        for (const auto& cv : clipMasks) {
+            int oldMask = cv.toInt();
+            auto it = objectMap.find(oldMask);
+            if (it != objectMap.end()) newMasks.push_back(it->second);
+        }
+        obj->setClipMaskIds(newMasks);
+
+        // Remap parent id
+        int oldParent = o.value("parentId").toInt();
+        if (oldParent >= 0) {
+            auto it = objectMap.find(oldParent);
+            if (it != objectMap.end()) obj->setParentId(it->second);
+            else obj->setParentId(0);
+        } else {
+            obj->setParentId(0);
+        }
     }
 
     // Pages
