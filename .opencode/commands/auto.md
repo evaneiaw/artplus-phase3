@@ -10,8 +10,16 @@ Siga `docs/agents/AUTOPILOT.md` e o bloco "Modo autônomo" do seu prompt.
 Interpretação dos argumentos:
 - vazio: escolha o alvo pelo §2 da política e diga em uma linha;
 - `--extract`: pare após evidência + spec + dossiê, sem implementar;
+- `--static`: só `rea` + dossiê + `ghidra` quando aplicável; sem GUI, spec ou código;
 - `--max N`: no máximo N módulos;
 - qualquer outro texto: módulo ou `F-###` alvo.
+
+Se `--static` estiver presente:
+1. despache `rea` para triagem leve: `diec`, `strings64`, `scripts/inspect_pe.py` e exports existentes. **Proibido** `rea analyze`/`decompile` com Ghidra neste modo. **Não crie `manifest.json` nem IDs de evidência sem um `F-###` válido**; registre a triagem em `docs/reverse-engineering/`;
+2. peça ao `testes` para gerar o dossiê;
+3. se não houver export Ghidra e o módulo tiver até 12 MB, despache `ghidra` e peça o dossiê de novo. O `ghidra` grava só em `rag/ghidra/exports/` e `docs/reverse-engineering/`; não invente `manifest.json` sem `F-###`;
+4. não acione `comportamento`, `documentacao`, `arquitetura`, `implementacao` nem `auditor`;
+5. registre lacunas no dossiê e siga.
 
 Execute o pipeline por funcionalidade: `rea` + `ghidra` + `comportamento`
 (paralelo quando possível) → `documentacao` → `arquitetura` → `implementacao`

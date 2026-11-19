@@ -12,6 +12,7 @@ Objetivo: extrair, especificar, implementar, testar e auditar sem pedir decisõe
 - `escopo` = módulo (`DocumentMarks.dll`) ou `F-###`.
 - Vazio = escolher pelo §2.
 - `--extract` = parar após evidência + spec + dossiê; não implementar.
+- `--static` = só evidência estática + dossiê; sem GUI, sem spec, sem código.
 - `--max N` = no máximo N módulos nesta execução (padrão 1).
 
 ## 2. Escolha do alvo (sem escopo)
@@ -50,6 +51,21 @@ Desempate: tamanho decrescente. Registrar a escolha em **uma linha**.
 - Spec só com **1 evidência estática + 1 comportamental**.
 - Máximo **3 subagentes** ativos; nunca dois `comportamento`.
 
+### Modo `--static` (noturno)
+
+1. `rea` faz a triagem do módulo usando `diec`, `strings64` e `scripts/inspect_pe.py`.
+   **Não** rode `rea analyze`/`decompile` com Ghidra nesse modo; use os exports existentes.
+   **Não crie `manifest.json` nem IDs `GHIDRA-*`/`CAP-*` sem um `F-###` válido**;
+   registre a triagem em `docs/reverse-engineering/`.
+2. `testes` gera o dossiê com o que já existe.
+3. Se não houver export Ghidra e o módulo tiver até 12 MB, `ghidra` analisa e
+   exporta em `rag/ghidra/exports/`; depois `testes` atualiza o dossiê.
+   O `ghidra` não cria `manifest.json` sem `F-###`.
+4. Se o módulo for maior que 12 MB ou já tiver export, o Ghidra é adiado e
+   registrado como lacuna.
+5. **Não** aciona `comportamento`, `documentacao`, `arquitetura`,
+   `implementacao` nem `auditor`. O objetivo é conhecimento e dossiê.
+
 ## 5. Evidência e confiança
 
 - Toda evidência tem **SHA-256 + versão**.
@@ -73,6 +89,13 @@ Desempate: tamanho decrescente. Registrar a escolha em **uma linha**.
 - 90 minutos ou 6 ciclos por execução; `--max` limita módulos.
 - Ao atingir, parar e reportar. Não pedir autorização para continuar.
 - A próxima execução retoma do estado registrado.
+
+### Execução noturna
+
+- Um módulo por sessão nova; limite de 50 minutos por módulo.
+- Modo `--static`: sem GUI, sem spec, sem código.
+- Parar ao atingir as horas configuradas ou a fila.
+- Relatório em `docs/phases/OVERNIGHT-AAAAMMDD.md`.
 
 ## 8. Escalação (única)
 
