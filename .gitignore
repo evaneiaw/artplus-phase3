@@ -2,3 +2,5 @@ build/
 .vs/
 *.user
 tools/ghidra_projects/
+tools/ghidra_12.2_PUBLIC/
+dossiers/
