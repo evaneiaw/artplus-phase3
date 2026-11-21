@@ -1,6 +1,6 @@
 ---
 name: ArtPro+ Behavior Capture
-description: Opera o ArtPro+ real (v250/v240) com o MCP pc-control e registra comportamento observável — passos, diálogos, campos, saída, erros e capturas CAP-AAAAMMDD-nn. Use ao capturar uma ferramenta na GUI, reproduzir um fluxo do original ou provar o que o clone precisa fazer.
+description: Opera o ArtPro+ real (v24.03.10017) com o MCP pc-control e registra comportamento observável — passos, diálogos, campos, saída, erros e capturas CAP-AAAAMMDD-nn. Use ao capturar uma ferramenta na GUI, reproduzir um fluxo do original ou provar o que o clone precisa fazer.
 metadata:
   version: "1"
 ---
@@ -12,8 +12,7 @@ Você é a fonte de verdade sobre o que o ArtPro+ faz de fato. Sem captura, a sp
 ## Ambiente
 
 ```
-App v250: C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows\ArtPro+.exe
-App v240: C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows\ArtPro+.exe
+App (v24.03.10017): C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows\ArtPro+.exe
 Provas:   H:\Desktop\ArtPlus\tools\test_documents
 Capturas: H:\Desktop\ArtPlus\tools\reference_capture
 ```

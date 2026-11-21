@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-11-21",
+  "sources": {
+    "modules": "docs/reverse-engineering/INVENTORY.md",
+    "features": "docs/features/*.md",
+    "functions": "rag/index/functions.jsonl"
+  },
+  "modules": {
+    "total": 289,
+    "by_status": {
+      "nao-tratado": 287,
+      "triado": 1,
+      "analisado": 0,
+      "comportamento": 0,
+      "spec": 1,
+      "arquitetado": 0,
+      "implementado": 0,
+      "testado": 0,
+      "auditado": 0
+    }
+  },
+  "features": {
+    "total": 7,
+    "by_status": {
+      "spec": 6,
+      "architecture": 0,
+      "implemented": 0,
+      "tested": 0,
+      "audited": 1
+    },
+    "ids": ["F-001", "F-002", "F-003", "F-004", "F-005", "F-006", "F-008"]
+  },
+  "features_notas": {
+    "F-002": "Mark Sets — spec escrita; evidência apenas estática (GHIDRA x4). CAP bloqueada por diálogo de licenciamento ArtPro+ v240. Fluxo mapeado: ApplyMarksFromSet → CopyMarksToPageWithLog → ApplyRelevantMarkSets → PrepareMarksCachePage.",
+    "F-003": "Bearer Bar Mark — confianca media: geometria fechada do PDF+ (0x180132A70 linhas 346..427) nao derivada; campos numericos nao expostos na UI observada",
+    "F-004": "Selection Mark — spec; evidência capturada na v25 (REA-PDFObjectActions-COMPLETE + CAP-20261120-01..06); GHIDRA manual pendente (GHIDRA-PDFObjectActions-MANUAL_PENDING). Requer revalidação contra 24.03.10017.",
+    "F-005": "Open Document — spec baseada em triagem estática de Document.dll, PDFAccessLayer.dll e PDFObjectLayer.dll (strings de MediaBox/CropBox/BleedBox/TrimBox/ArtBox, PDFObject, ArtDoc). Falta mapeamento Ghidra das funções de parsing de content stream e instânciação do ArtDoc.",
+    "F-006": "Save Document — confianca baixa: evidencia estatica de Document.dll (0x180099710) e NDLModel.dll (0x180021990); comportamental bloqueada (CAP-BLOCKED-006, GUI inativa, menu File sem resposta). UI/atalhos/library nao observados.",
+    "F-008": "Color Management/ICC — spec baseada em evidência estática de ColorManipulationLayer.dll (5 funções, 4 alta confiança, 1 média). Comportamental bloqueada por BLO-004 (GUI inativa, sem CAP-*). Dependências: mscms.dll + lcms.dll. Strings: ISO 12647-2, FOGRA53, Pantone."
+  },
+  "functions_indexed": 58,
+  "divergencias": [
+    "CAP-20261119-01 nao gerou PDF de saida (Save As falhou com 'O nome do arquivo nao e valido'); a persistencia de saida de F-001 permanece lacuna.",
+    "CAP-20261119-02 (F-003) nao gerou PDF de saida: tools/reference_capture/F-003/output/ esta vazio; as chaves Position/Offset/Extends da Bearer Bar so estao provadas por leitura de codigo, nao por arquivo gravado.",
+    "F-003: a escala de pixels da captura (zoom 97,52% => 3,686 px/mm) contradiz a largura medida da Media Box (580 px para 210 mm => 2,762 px/mm); nenhuma medida em mm derivada da captura deve ser tratada como validada.",
+    "CAP-BLOCKED-006: save com GUI inativa (menu File/atalhos nao responderam); captura CAP-20261121-01; spec F-006 em confianca baixa.",
+    "BLO-004: color management sem captura comportamental (GUI bloqueada); spec F-008 em confianca media; layout de diálogo, soft proof e exportação OutputIntent não capturados."
+  ]
+}

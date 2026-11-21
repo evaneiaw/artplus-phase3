@@ -26,7 +26,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
 
@@ -257,7 +259,7 @@ def build_dossier(root: Path, out_root: Path, module: str, manifests, inventory)
     identity = inventory.get(module.lower(), {})
     binary = next((item.get("binario") for item in manifests if item.get("binario")), "")
     if not binary:
-        candidate = Path(r"C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows") / module
+        candidate = Path(r"C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows") / module
         if candidate.is_file():
             binary = str(candidate)
     sha256 = next((item.get("sha256") for item in manifests if item.get("sha256")), "") or identity.get("sha256", "")

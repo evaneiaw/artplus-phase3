@@ -6,13 +6,14 @@ agent: orquestrador
 Escopo: $ARGUMENTS
 
 Siga `docs/agents/AUTOPILOT.md` e o bloco "Modo autônomo" do seu prompt.
+Versão de referência: ArtPro+ **v24.03.10017** (ver `docs/agents/REFERENCE_VERSION.md`).
 
 Interpretação dos argumentos:
-- vazio: escolha o alvo pelo §2 da política e diga em uma linha;
-- `--extract`: pare após evidência + spec + dossiê, sem implementar;
-- `--static`: só `rea` + dossiê + `ghidra` quando aplicável; sem GUI, spec ou código;
-- `--max N`: no máximo N módulos;
-- qualquer outro texto: módulo ou `F-###` alvo.
+- vazio: execute a **próxima tarefa elegível** (§2 da política) e **continue**;
+- `F-###` ou nome de módulo: **priorize** esse alvo;
+- `--extract`: investigação, evidência, spec e dossiê — **sem implementação**;
+- `--static`: triagem estática, **sem GUI**;
+- `--max N`: no máximo N módulos nesta execução (limite solicitado pelo usuário, **não** uma regra padrão de encerramento).
 
 Se `--static` estiver presente:
 1. despache `rea` para triagem leve: `diec`, `strings64`, `scripts/inspect_pe.py` e exports existentes. **Proibido** `rea analyze`/`decompile` com Ghidra neste modo. **Não crie `manifest.json` nem IDs de evidência sem um `F-###` válido**; registre a triagem em `docs/reverse-engineering/`;
@@ -26,12 +27,16 @@ Execute o pipeline por funcionalidade: `rea` + `ghidra` + `comportamento`
 → `testes` → `auditor`.
 
 Não faça perguntas entre etapas. Escale apenas nos cinco casos da política.
-Auditoria reprovada volta uma vez com a lacuna exata; a segunda reprovação vira
+Auditoria reprovada volta **uma vez** com a lacuna exata; a segunda reprovação vira
 bloqueio registrado e o ciclo segue.
 
-Ao concluir cada feature auditada: atualize `INVENTORY.md`, `ROADMAP.md` e
-`FEATURE_MATRIX.csv`; peça ao `testes` para rodar
+Continue para a próxima tarefa elegível — **não há limite padrão** de 1 módulo /
+90 minutos / 6 ciclos. `--max N` é o único limite de quantidade, quando solicitado.
+
+Ao concluir cada feature auditada: atualize `INVENTORY.md`, `ROADMAP.md`,
+`FEATURE_MATRIX.csv` e `docs/agents/CHECKPOINT.md`; peça ao `testes` para rodar
 `python scripts/dossier.py --module <módulo>`.
 
-Ao fim do orçamento: escreva `docs/phases/STATUS.md` e responda em 5 linhas
-(FEITO, BLOQUEADO, PRÓXIMO, COBERTURA, ONDE LER).
+Ao atingir um limite **real** da sessão: escreva `docs/agents/CHECKPOINT.md` +
+`docs/phases/STATUS.md` e informe **exatamente como retomar** (FEITO, BLOQUEADO,
+PRÓXIMO, COBERTURA, ONDE LER).

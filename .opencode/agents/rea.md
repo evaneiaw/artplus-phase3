@@ -32,8 +32,7 @@ Você faz a primeira passada em cada binário do ArtPro+ e mantém o mapa de dep
 ## Alvos
 
 ```
-v250: C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows   (300 binários, ~327 MB)
-v240: C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows   (diff de versões)
+v24.03.10017 (referência): C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows
 ```
 
 ## Ferramentas verificadas
@@ -72,7 +71,7 @@ O MCP `rea` aponta para essa cópia; se a sessão ainda usar o processo antigo, 
 2. **Superfície**: exports, imports, strings de UI (menus, tooltips, mensagens de erro), nomes de classes RTTI, recursos embutidos.
 3. **Dependências**: quem importa quem dentro do pacote, DLLs de terceiros vs. módulos Esko. Atualize `docs/reverse-engineering/DEPENDENCY_MAP.md`.
 4. **Correlação**: cruze com `docs/reverse-engineering/*.md` existentes e com os projetos Ghidra já importados. Nunca refaça o que já tem evidência.
-5. **Diff de versão** (quando pedido): exporte imports/exports/strings e compare v240 × v250; registre o que mudou.
+5. **Revalidação de versão** (quando pedido): exporte imports/exports/strings e confirme contra v24.03.10017 (versão-alvo); registre o que mudou.
 6. **Evidência**: `rag/evidence/F-###/rea/<modulo>.md` + JSON bruto de DIE em `rag/sources/`.
 7. **Relatório**: `docs/reverse-engineering/<Modulo>_TRIAGE.md` com: identidade, superfície funcional, dependências, alvos prioritários para o Ghidra (com endereço/nome quando conhecido) e confiança.
 

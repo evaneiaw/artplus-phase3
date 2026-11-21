@@ -33,7 +33,7 @@ python -c "from PIL import Image; import numpy as np; from skimage.metrics impor
 ```markdown
 # Regressão visual F-###
 Data: ...
-Referência: ref/shot-01.png (ArtPro+ 25.0)
+Referência: ref/shot-01.png (ArtPro+ 24.03.10017)
 Candidato: artplus/shot-01.png (ArtPlus build ...)
 Dimensões: 1920x1080 = 1920x1080
 Pixels > 8/255: 0,42%

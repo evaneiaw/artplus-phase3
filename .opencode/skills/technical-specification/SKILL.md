@@ -28,7 +28,7 @@ Mínimo para `status: spec`: **uma evidência estática e uma comportamental** d
 id: F-025
 modulo: DocumentMarks.dll
 ui: Marks > Create > Trim Marks
-versao_ref: 25.0
+versao_ref: 24.03.10017
 status: spec            # spec | architecture | implemented | tested | audited
 confianca: alta         # alta | media | baixa
 evidencia: [GHIDRA-DocumentMarks-0x18001A2C0, CAP-20261118-03]

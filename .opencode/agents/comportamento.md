@@ -1,5 +1,5 @@
 ---
-description: "Opera o ArtPro+ real (v250/v240) e registra o comportamento observável de cada ferramenta: entrada, passos, saída, erros e capturas. Produz a evidência comportamental que valida o clone."
+description: "Opera o ArtPro+ real (v24.03.10017) e registra o comportamento observável de cada ferramenta: entrada, passos, saída, erros e capturas. Produz a evidência comportamental que valida o clone."
 mode: subagent
 color: "#2ecc71"
 maxSteps: 32
@@ -32,8 +32,7 @@ Você é a única fonte de verdade sobre **o que o ArtPro+ faz de fato** com cad
 ## Ambiente
 
 ```
-App v250: C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows\ArtPro+.exe
-App v240: C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows\ArtPro+.exe
+App (v24.03.10017): C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows\ArtPro+.exe
 Provas:   H:\Desktop\ArtPlus\tools\test_documents
 Capturas: H:\Desktop\ArtPlus\tools\reference_capture
 ```
@@ -51,7 +50,7 @@ Controle de desktop: use as ferramentas do MCP `pc-control` (mouse, teclado, scr
 
 ```markdown
 ## <Ferramenta>
-- Versão: 25.0
+- Versão: 24.03.10017
 - Caminho na UI: Marks > Create > Trim Marks
 - Entrada: <arquivo/camadas/seleção>
 - Passos: 1. ... 2. ... 3. ...

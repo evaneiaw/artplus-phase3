@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ArtPlus RAG metadata",
+  "schema_version": "1.1.0",
+  "definitions": {
+    "feature": {
+      "type": "object",
+      "required": ["id", "modulo", "ui", "status", "evidencia"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^F-[0-9]{3}[a-z]?$" },
+        "modulo": { "type": "string" },
+        "ui": { "type": "string" },
+        "versao_ref": { "type": "string" },
+        "historico": { "type": "string" },
+        "status": {
+          "enum": ["spec", "architecture", "implemented", "tested", "audited"]
+        },
+        "confianca": { "enum": ["alta", "media", "baixa"] },
+        "evidencia": { "type": "array", "items": { "type": "string" } },
+        "adr": { "type": ["string", "null"] },
+        "tests": { "type": "array", "items": { "type": "string" } },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "function": {
+      "type": "object",
+      "required": ["modulo", "endereco", "nome"],
+      "additionalProperties": false,
+      "properties": {
+        "modulo": { "type": "string" },
+        "endereco": { "type": "string", "pattern": "^0x[0-9A-Fa-f]+$" },
+        "nome": { "type": "string" },
+        "assinatura": { "type": "string" },
+        "classe": { "type": ["string", "null"] },
+        "xrefs": { "type": "array", "items": { "type": "string" } },
+        "spec": { "type": ["string", "null"] },
+        "confianca": { "enum": ["alta", "media", "baixa"] }
+      }
+    },
+    "module": {
+      "type": "object",
+      "required": ["name", "kind", "size_bytes", "sha256", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "kind": { "enum": ["exe", "dll"] },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[0-9A-F]{64}$" },
+        "status": {
+          "enum": [
+            "nao-tratado",
+            "triado",
+            "analisado",
+            "comportamento",
+            "spec",
+            "arquitetado",
+            "implementado",
+            "testado",
+            "auditado"
+          ]
+        }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["id", "versao_ref", "binario", "sha256", "estatico", "comportamental"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^F-[0-9]{3}[a-z]?$" },
+        "versao_ref": { "type": "string" },
+        "binario": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9A-F]{64}$" },
+        "estatico": { "type": "array", "items": { "type": "string" } },
+        "comportamental": { "type": "array", "items": { "type": "string" } },
+        "bloqueios": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

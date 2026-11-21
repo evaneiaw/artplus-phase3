@@ -12,7 +12,7 @@ $scripts  = 'H:\Desktop\ArtPlus\scripts\ghidra_scripts'
 ## Import com análise
 
 ```powershell
-$target = 'C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows\DocumentMarks.dll'
+$target = 'C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows\DocumentMarks.dll'
 $log = 'H:\Desktop\ArtPlus\tools\ghidra_analysis\DocumentMarks.import.log'
 $empty = Join-Path $env:TEMP 'ghidra-empty.txt'
 New-Item -ItemType File -Force $empty | Out-Null

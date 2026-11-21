@@ -1,6 +1,6 @@
 ---
 name: Ghidra Analysis
-description: Extrai funções, xrefs, vtables/RTTI, estruturas e pseudocódigo de binários do ArtPro+ com Ghidra 12.2 headless e JDK 25. Use ao importar módulo, analisar função, comparar v240/v250, rodar post-script ou registrar evidência GHIDRA-<modulo>-<endereco>.
+description: Extrai funções, xrefs, vtables/RTTI, estruturas e pseudocódigo de binários do ArtPro+ com Ghidra 12.2 headless e JDK 25. Use ao importar módulo, analisar função, revalidar contra v24.03.10017, rodar post-script ou registrar evidência GHIDRA-<modulo>-<endereco>.
 metadata:
   version: "1"
 ---
@@ -14,8 +14,7 @@ JAVA_HOME = C:\Program Files\Eclipse Adoptium\jdk-25.0.5.8-hotspot
 GHIDRA    = H:\Desktop\ArtPlus\tools\ghidra_12.2_PUBLIC
 HEADLESS  = H:\Desktop\ArtPlus\tools\ghidra_12.2_PUBLIC\support\analyzeHeadless.bat
 PROJETOS  = H:\Desktop\ArtPlus\tools\ghidra_projects
-ALVOS     = C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows
-v240      = C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows
+ALVOS     = C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows   (referência v24.03.10017)
 SCRIPTS   = H:\Desktop\ArtPlus\scripts\ghidra_scripts
 EXPORTS   = H:\Desktop\ArtPlus\rag\ghidra\exports
 ```
@@ -37,7 +36,7 @@ Não use a raiz `RE-Tools` (não existe nesta máquina) nem o Ghidra global. JDK
 $env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-25.0.5.8-hotspot'
 $headless = 'H:\Desktop\ArtPlus\tools\ghidra_12.2_PUBLIC\support\analyzeHeadless.bat'
 $projects = 'H:\Desktop\ArtPlus\tools\ghidra_projects'
-$target   = 'C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows\DocumentMarks.dll'
+$target   = 'C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows\DocumentMarks.dll'
 $log      = 'H:\Desktop\ArtPlus\tools\ghidra_analysis\DocumentMarks.import.log'
 $empty    = Join-Path $env:TEMP 'ghidra-empty-stdin.txt'
 New-Item -ItemType File -Force $empty | Out-Null
@@ -86,9 +85,9 @@ Salve o JSON bruto em `rag/evidence/F-###/ghidra/` e cite a função no relatór
 Formato: `rag/evidence/F-###/ghidra/<modulo>__<endereco>.md`, ID `GHIDRA-<Modulo>-<endereco>`.
 Índice navegável: `docs/reverse-engineering/<Modulo>_FUNCTIONS.md`.
 
-## Diff v240 × v250
+## Revalidação contra a versão-alvo
 
-Importe a versão antiga em projeto separado (`ArtProPlus_v240`) e compare exports de funções, imports e strings. Só afirme "é assim" depois de confirmar que o comportamento não mudou entre versões.
+Confirme que o achado corresponde à v24.03.10017 (versão-alvo). Registros da v25 são históricos e fora do fluxo ativo; só afirme "é assim" depois de confirmar contra a versão-alvo.
 
 ## Limites
 

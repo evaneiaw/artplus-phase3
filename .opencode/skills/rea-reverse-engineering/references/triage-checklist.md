@@ -2,7 +2,7 @@
 
 ## Identidade
 
-- [ ] Caminho absoluto e versão (`v250`/`v240`).
+- [ ] Caminho absoluto e versão (`v24.03.10017`).
 - [ ] SHA-256 (`Get-FileHash -Algorithm SHA256`).
 - [ ] Arquitetura (x86/x64), subsistema (GUI/console), timestamp.
 - [ ] Compilador/linker (DIE), packer/protector, entropia por seção.
@@ -29,7 +29,7 @@
 - [ ] Endereços já conhecidos (com ID `GHIDRA-*`).
 - [ ] O que **não** precisa ser analisado (biblioteca de terceiro).
 
-## Diff v240 × v250
+## Revalidação contra a versão-alvo
 
 - [ ] Imports/exports adicionados/removidos.
 - [ ] Strings de UI alteradas.

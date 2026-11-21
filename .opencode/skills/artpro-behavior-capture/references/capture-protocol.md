@@ -20,7 +20,7 @@ Evidência final: `rag/evidence/F-###/behavior/` com os mesmos artefatos + hash 
 
 ```markdown
 ## Trim Marks
-- Versão: 25.0
+- Versão: 24.03.10017
 - Caminho na UI: Marks > Create > Trim Marks
 - Entrada: A4, 1 camada, seleção vazia
 - Passos:
