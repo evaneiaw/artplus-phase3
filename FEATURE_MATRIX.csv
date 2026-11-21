@@ -1,12 +1,9 @@
-# FEATURE_MATRIX.csv
 Feature,Status,Priority,Category,Notes
-Open Document,Not Started,High,File,PDF/PDF+
-Save Document,Not Started,High,File,
-Zoom/Pan,Not Started,Medium,View,
-Object Selection,Not Started,High,Selection,
-Undo/Redo,Not Started,High,Edit,
-Layers,Not Started,Medium,Document,
-Separations,Not Started,High,Colors,
-Preflight,Not Started,Medium,Quality,
-Step & Repeat,Not Started,Low,Production,
-Trapping,Not Started,Low,Prepress,
+Cut Mark (F-001),Audited,High,Marks,ADR-001; CutMarkTests 12/12; docs/audit/F-001-audit-2.md
+Mark Set (F-002),Auditado com Ressalvas,Medium,Marks,Spec F-002; ADR-003; docs/audit/F-002-audit.md; implementação stub (cache + aplicação de marcas)
+Bearer Bar (F-003),Auditado com Ressalvas,High,Marks,ADR-002; spec F-003.md; implementação src/prepress/bearer_bar.*
+Selection Mark (F-004),Aprovado com Ressalvas,Medium,Marks,Spec F-004; ADR-004; src/prepress/selection_mark.*; laudo docs/audit/F-004-audit.md — APROVADO COM RESSALVAS (implementação OK; CAP bloqueado por HASP)
+Open Document (F-005),Aprovado com Ressalvas,High,File,Spec F-005.md; ADR-013; implementação src/document/** + src/pdf/**; build OK (ArtPlus.exe exit 0); ctest 4/6 (2 falhas runtime 0xc0000135); auditor APROVADO COM RESSALVAS docs/audit/F-005-audit.md
+Save Document (F-006),Spec,High,File,Spec F-006.md (status: spec); ADR-006; bloqueio comportamental (CAP-BLOCKED-006); próxima: arquitetura
+Step & Repeat (F-007),Bloqueado,High,Production,LayoutEngine.dll; rag/evidence/F-007 manifest; BLO-003 CAP comportamental bloqueado; identidade verificada
+Color Management (F-008),Spec,Medium,Color,Spec F-008.md; ColorManipulationLayer.dll; versao_ref 24.03.10017 (evidência de versão anterior; ver REFERENCE_VERSION.md)

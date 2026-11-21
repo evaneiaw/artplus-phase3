@@ -3,6 +3,18 @@
 ArtPlus é uma reimplementação funcional do Esko ArtPro+ em C++17/Qt 6.8.3.
 Este arquivo define como os agentes trabalham. Em qualquer conflito, **este arquivo ganha**.
 
+## 0. Versão de referência (regra absoluta)
+
+A única referência válida do projeto é **Esko ArtPro+ v24.03.10017**, instalada em
+`C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows`. Fonte única da verdade:
+`docs/agents/REFERENCE_VERSION.md`.
+
+- Nenhum documento, agente, comando, skill, script ou evidência ativa usa outra versão como referência.
+- A versão `25.03.116` (`C:\Esko\bg_prog_artpro+_v250`) é **histórica e fora do fluxo ativo**;
+  registros derivados dela são preservados para rastreabilidade, nunca como especificação/evidência da versão-alvo.
+- Não alterar hashes, nomes de binário ou resultados históricos para simular evidência da v24.
+- `scripts/check_version.py` valida esta regra e reporta `caminho:linha` de cada ocorrência.
+
 ## 1. Postura do projeto
 
 - Engenharia reversa **profunda e declarada** do ArtPro+ (Ghidra + triagem + operação do original).
@@ -33,7 +45,7 @@ Nenhuma etapa começa sem o artefato da anterior. O `auditor` tem veto.
 
 | Agente | Modo | Escreve em | Não pode |
 |---|---|---|---|
-| `orquestrador` | primary | `ROADMAP.md`, `FEATURE_MATRIX.csv`, `docs/phases/**`, `docs/agents/**`, `docs/reverse-engineering/INVENTORY.md` | editar código, analisar binário, rodar shell |
+| `orquestrador` | primary | `ROADMAP.md`, `FEATURE_MATRIX.csv`, `docs/phases/**`, `docs/agents/**`, `docs/reverse-engineering/INVENTORY.md`, `AGENTS.md`, `opencode.jsonc`, `.opencode/agents/**`, `.opencode/commands/**`, `.opencode/skills/**` | editar `src/`, analisar binário, rodar shell livremente (o `git`, restrito a status/add/commit/push-master/log/diff/rev-parse, só em sessão com shell exposto — validar em nova sessão) |
 | `ghidra` | subagent | `tools/ghidra_analysis/**`, `tools/ghidra_projects/**`, `docs/reverse-engineering/**`, `rag/evidence/**` | editar `src/`, `tests/`, specs |
 | `rea` | subagent | `rag/evidence/**`, `rag/sources/**`, `docs/reverse-engineering/**` | editar `src/`, `tests/`, specs |
 | `comportamento` | subagent | `tools/reference_capture/**`, `docs/behavior/**`, `rag/evidence/**` | editar `src/`, `tests/`, specs |
@@ -44,6 +56,8 @@ Nenhuma etapa começa sem o artefato da anterior. O `auditor` tem veto.
 | `auditor` | subagent | `docs/audit/**` | editar qualquer outra coisa |
 
 Nenhum subagente lança subagente. O `orquestrador` é o único que despacha.
+
+> **Shell do `orquestrador`**: a permissão de `git` no frontmatter só expõe a ferramenta de terminal em **sessão nova** (validar na FASE H). Enquanto não validado, o commit/push é delegado ao `testes`. O limite de **3 subagentes ativos** é obrigatório, mas **não** é imposto automaticamente pela config V1.
 
 ## 4. Identificadores e evidência
 
@@ -58,8 +72,8 @@ Nenhum subagente lança subagente. O `orquestrador` é o único que despacha.
 ```json
 {
   "id": "F-025",
-  "versao_ref": "25.0",
-  "binario": "C:\\Esko\\bg_prog_artpro+_v250\\ArtPro+.app\\Contents\\Windows\\DocumentMarks.dll",
+  "versao_ref": "24.03.10017",
+  "binario": "C:\\Esko\\bg_prog_artpro+_v240\\ArtPro+.app\\Contents\\Windows\\DocumentMarks.dll",
   "sha256": "...",
   "estatico": ["GHIDRA-DocumentMarks-0x18001A2C0"],
   "comportamental": ["CAP-20261118-03"],
@@ -97,8 +111,8 @@ python scripts\scan_binary.py <diretório>
 Alvos de referência:
 
 ```
-v250: C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows  (300 binários, ~327 MB)
-v240: C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows
+v24.03.10017 (referência): C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows
+v25 (histórico, fora do fluxo ativo): C:\Esko\bg_prog_artpro+_v250\ArtPro+.app\Contents\Windows
 ```
 
 > **Instalação única do Ghidra:** `H:\Desktop\ArtPlus\tools\ghidra_12.2_PUBLIC`.
@@ -114,6 +128,9 @@ v240: C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows
 6. **Nada de stub silencioso.** `TODO(F-###)` é aceitável; função que finge funcionar não é.
 7. **Unidade explícita.** `mm`, `pt`, `dpi` no nome do campo e na spec.
 8. **Conflito de contrato** vai para `docs/agents/CONFLITOS.md` antes de virar código.
+9. **Autonomia.** Decisões técnicas pertencem aos agentes; escalar só nos cinco casos da política (`docs/agents/AUTOPILOT.md` §9).
+10. **Execução contínua com checkpoint.** O `/auto` continua até a fila elegível esgotar ou um limite real da sessão; a cada etapa concluída grava `docs/agents/CHECKPOINT.md`, e a retomada continua sem repetir trabalho.
+11. **Estado bloqueado.** Feature em `docs/agents/BLOQUEIOS.md` vira `bloqueado` no `INVENTORY.md` e não é redistribuída até o bloqueio ser resolvido.
 
 ## 7. Estado atual do projeto
 
@@ -123,6 +140,9 @@ v240: C:\Esko\bg_prog_artpro+_v240\ArtPro+.app\Contents\Windows
 - Módulos já mapeados em `docs/reverse-engineering/`: `Document.dll` (call graph, estruturas,
   workflows), inventário de binários, mapa de dependências e estratégia Ghidra.
 - Fila de cobertura: `docs/reverse-engineering/INVENTORY.md`.
+- Auditorias concluídas: F-001…F-005 (com ressalvas). Spec: F-006, F-008. Triado: F-007.
+  Ver `FEATURE_MATRIX.csv` e `docs/phases/STATUS.md`.
+- Referência de versão: **v24.03.10017** (ver §0 e `docs/agents/REFERENCE_VERSION.md`).
 
 ## 8. Skills
 

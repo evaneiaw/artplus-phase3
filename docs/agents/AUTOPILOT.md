@@ -1,19 +1,21 @@
 # Política de autonomia — ArtPlus
 
-Vale para o comando `/auto`. Em qualquer conflito, `AGENTS.md` ganha.
-Objetivo: extrair, especificar, implementar, testar e auditar sem pedir decisões.
+Vale para o comando `/auto` e para a operação autônoma do `orquestrador`.
+Em qualquer conflito, `AGENTS.md` ganha. A **versão de referência** é definida
+em `docs/agents/REFERENCE_VERSION.md` (Esko ArtPro+ **v24.03.10017**).
 
 ## 1. Gatilho e escopo
 
 ```
-/auto [escopo] [--extract] [--max N]
+/auto [escopo] [--extract] [--static] [--max N]
 ```
 
 - `escopo` = módulo (`DocumentMarks.dll`) ou `F-###`.
 - Vazio = escolher pelo §2.
 - `--extract` = parar após evidência + spec + dossiê; não implementar.
-- `--static` = só evidência estática + dossiê; sem GUI, sem spec, sem código.
-- `--max N` = no máximo N módulos nesta execução (padrão 1).
+- `--static` = só triagem/estático + dossiê; sem GUI, sem spec, sem código.
+- `--max N` = no máximo N módulos nesta execução. É um **limite solicitado pelo
+  usuário**, não uma regra padrão de encerramento.
 
 ## 2. Escolha do alvo (sem escopo)
 
@@ -25,14 +27,24 @@ Objetivo: extrair, especificar, implementar, testar e auditar sem pedir decisõe
 4. Infra.
 5. Pular terceiros (Qt, OpenCV, ICU, Xerces, OpenImageIO, OpenEXR, zlib) e
    módulos já `auditado`.
+6. **Pular `bloqueado`**: feature registrada em `docs/agents/BLOQUEIOS.md` (estado
+   `bloqueado` no `INVENTORY.md`) **não é redistribuída** até o bloqueio ser resolvido.
 
 Desempate: tamanho decrescente. Registrar a escolha em **uma linha**.
 
-## 3. Granularidade
+## 3. Execução contínua
 
-- Um ciclo = uma funcionalidade de UI, com `F-###` sequencial.
-- Um módulo pode ter várias features; só é `auditado` quando todas estiverem.
-- Módulo gigante é dividido por menu/ferramenta, nunca por "terminar o DLL".
+A execução continua até:
+
+- a fila elegível estar concluída;
+- não existir atividade independente possível;
+- o ambiente impedir a continuação;
+- um limite **real** da sessão/plataforma for atingido.
+
+Não há limite padrão de 1 módulo / 90 minutos / 6 ciclos. `--max N` limita
+módulos quando o usuário pedir. Ao atingir um limite real da sessão, gravar o
+checkpoint (§8) e informar **exatamente como retomar**. Não confundir limite de
+sessão com conclusão do projeto.
 
 ## 4. Pipeline e gates
 
@@ -49,81 +61,101 @@ Desempate: tamanho decrescente. Registrar a escolha em **uma linha**.
 
 - Estático e comportamento podem rodar em paralelo.
 - Spec só com **1 evidência estática + 1 comportamental**.
-- Máximo **3 subagentes** ativos; nunca dois `comportamento`.
+- Máximo **3 subagentes** ativos — limite operacional obrigatório, **sem enforcement
+  automático** na config V1; nunca dois `comportamento`.
 
 ### Modo `--static` (noturno)
 
-1. `rea` faz a triagem do módulo usando `diec`, `strings64` e `scripts/inspect_pe.py`.
-   **Não** rode `rea analyze`/`decompile` com Ghidra nesse modo; use os exports existentes.
-   **Não crie `manifest.json` nem IDs `GHIDRA-*`/`CAP-*` sem um `F-###` válido**;
-   registre a triagem em `docs/reverse-engineering/`.
+1. `rea` faz a triagem usando `diec`, `strings64` e `scripts/inspect_pe.py`.
+   **Não** rode `rea analyze`/`decompile` com Ghidra nesse modo. **Não** crie
+   `manifest.json` nem IDs `GHIDRA-*`/`CAP-*` sem um `F-###` válido; registre a
+   triagem em `docs/reverse-engineering/`.
 2. `testes` gera o dossiê com o que já existe.
 3. Se não houver export Ghidra e o módulo tiver até 12 MB, `ghidra` analisa e
    exporta em `rag/ghidra/exports/`; depois `testes` atualiza o dossiê.
-   O `ghidra` não cria `manifest.json` sem `F-###`.
 4. Se o módulo for maior que 12 MB ou já tiver export, o Ghidra é adiado e
    registrado como lacuna.
 5. **Não** aciona `comportamento`, `documentacao`, `arquitetura`,
-   `implementacao` nem `auditor`. O objetivo é conhecimento e dossiê.
+   `implementacao` nem `auditor`.
 
 ## 5. Evidência e confiança
 
-- Toda evidência tem **SHA-256 + versão**.
+- Toda evidência tem **SHA-256 + versão** (`24.03.10017`).
 - Spec exige `GHIDRA-*` **e** `CAP-*`.
 - Comportamento impossível (HASP, crash, diálogo bloqueado): spec com
   `confianca: baixa` + bloqueio registrado; **não implementar**.
 - Evidência conflitante sobre regra central: bloquear e seguir; nunca adivinhar.
 - Inferência sempre marcada com fonte.
 - Proibido stub silencioso.
+- Registros derivados da v25 são **históricos**: fora do fluxo ativo, sem servir
+  de especificação/evidência da versão-alvo (ver `REFERENCE_VERSION.md`).
 
 ## 6. Falha, retry e bloqueio
 
-- 2 tentativas por etapa, com motivo diferente.
+- 2 tentativas por etapa, com motivo diferente; nunca repetir comando idêntico
+  que já falhou sem mudar as condições.
 - Auditoria reprovada volta **uma vez** com a lacuna exata; segunda = bloqueio.
 - Bloqueio vai para `docs/agents/BLOQUEIOS.md` com: ID, módulo, etapa, motivo,
-  evidência existente e próximo passo. Depois seguir para o próximo alvo.
-- Nunca repetir comando idêntico que já falhou.
+  evidência existente e próximo passo. A feature correspondente entra como
+  `bloqueado` no `INVENTORY.md` e **não é redistribuída** até o bloqueio ser resolvido.
+- Depois seguir para o próximo alvo elegível.
 
-## 7. Orçamento
+### Recuperação de execução
 
-- 90 minutos ou 6 ciclos por execução; `--max` limita módulos.
-- Ao atingir, parar e reportar. Não pedir autorização para continuar.
-- A próxima execução retoma do estado registrado.
+Ao falhar uma ferramenta: capturar o erro → identificar a causa → classificar
+(permissão / ambiente / dependência / código / ferramenta) → tentar alternativa
+segura → redistribuir quando apropriado → registrar bloqueio só após tentativas
+justificadas. Não esconder falha; não declarar sucesso sem validação.
 
-### Execução noturna
+## 7. Autonomia de decisão
 
-- Um módulo por sessão nova; limite de 50 minutos por módulo.
-- Modo `--static`: sem GUI, sem spec, sem código.
-- Parar ao atingir as horas configuradas ou a fila.
-- Relatório em `docs/phases/OVERNIGHT-AAAAMMDD.md`.
+**Não** perguntar ao usuário: qual módulo analisar, classe implementar,
+biblioteca usar, método escolher, arquivo modificar, teste rodar, abordagem
+adotar, erro corrigir, especialista acionar, ou próxima tarefa.
 
-## 8. Escalação (única)
+Em dúvida técnica: consultar evidência → arquitetura existente → documentação →
+comparar alternativas → escolher a mais consistente → registrar a justificativa
+→ prosseguir. Sem evidência suficiente, **não inventar**: registrar a lacuna e
+avançar nas atividades independentes.
 
-1. Licença/HASP que impede o comportamento.
-2. Evidência inconciliável sobre regra central.
-3. Ação destrutiva ou irreversível.
-4. Orçamento estourado (apenas reportar).
-5. Credencial ou rede externa necessária.
+## 8. Checkpoint e retomada
 
-Fora desses casos, decidir e registrar.
+- Checkpoint operacional: `docs/agents/CHECKPOINT.md`.
+- Atualizar **após cada etapa concluída** (não só ao fim da sessão).
+- Conteúdo: última tarefa concluída, tarefa atual, próximas tarefas,
+  especialistas acionados, arquivos modificados, estado do build, estado dos
+  testes, auditorias, bloqueios, último commit, próxima ação executável.
+- Se a sessão terminar por limite da plataforma, o checkpoint permite retomada
+  sem repetir trabalho.
 
-## 9. Git
+## 9. Escalação (única)
 
-- Criar branch `auto/AAAAMMDD` no início.
-- Commit por feature auditada, só com os caminhos do ciclo.
+1. Credencial ou autorização pessoal indispensável.
+2. Licença legítima ou acesso externo que só o usuário fornece.
+3. Operação destrutiva ou irreversível fora do escopo autorizado.
+4. Decisão comercial ou de produto não inferível tecnicamente.
+5. Bloqueio ambiental que exija intervenção física/administrativa do usuário.
+
+Mesmo nesses casos, continuar todas as tarefas independentes. Não transformar
+uma pendência em motivo para interromper o projeto.
+
+## 10. Git
+
+- Repositório `https://github.com/evaneiaw/artplus-phase3`, branch `master`.
+- Commit por conjunto coerente de alterações validadas; mensagem descritiva;
+  push `origin/master`; confirmar o SHA publicado.
 - Não commitar `build/`, `dossiers/`, `tools/ghidra_projects/`.
-- Sem push e sem `--force`.
-- Se houver mudanças de outra sessão na árvore, não stagear.
+- Sem `--force`, sem reescrever histórico remoto.
+- Conflito: resolver preservando o trabalho existente.
 
-## 10. Saída obrigatória
+## 11. Saída obrigatória
 
-- `docs/phases/STATUS.md` — módulo atual, estado, cobertura, bloqueios, próximo.
-- `dossiers/<Módulo>/DOSSIER.md` — documento único do módulo.
-- `dossiers/INDEX.md` — painel de todos os dossiês.
-- `dossiers/knowledge.jsonl` — conhecimento pesquisável.
-- Resumo final de 5 linhas.
+- `docs/phases/STATUS.md` — estado resumido.
+- `docs/agents/CHECKPOINT.md` — checkpoint operacional.
+- `dossiers/<Módulo>/DOSSIER.md`, `dossiers/INDEX.md`, `dossiers/knowledge.jsonl`.
+- Resumo final de 5 linhas (FEITO, BLOQUEADO, PRÓXIMO, COBERTURA, ONDE LER).
 
-## 11. Definição de pronto
+## 12. Definição de pronto
 
 Uma feature só termina com: auditoria aprovada, dossiê atualizado, status
-atualizado, commit na branch e `ci_local.ps1` verde. Sem isso, é bloqueio.
+atualizado, commit e push. Sem isso, é bloqueio.
